@@ -592,6 +592,9 @@ static INLINE void init_encode_rd_sb(AV1_COMP *cpi, ThreadData *td,
   reset_hash_records(&x->txfm_search_info, cpi->sf.tx_sf.use_inter_txb_hash);
   av1_zero(x->picked_ref_frames_mask);
   av1_invalid_rd_stats(rd_cost);
+#if CONFIG_EXT_RECUR_PARTITIONS
+  av1_init_sms_data_bufs(x->sms_bufs);
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
 }
 
 /*!\brief Encode a superblock (RD-search-based)
@@ -618,6 +621,9 @@ static AOM_INLINE void encode_rd_sb(AV1_COMP *cpi, ThreadData *td,
   SIMPLE_MOTION_DATA_TREE *const sms_root = td->sms_root;
   const int ss_x = cm->seq_params.subsampling_x;
   const int ss_y = cm->seq_params.subsampling_y;
+  (void)tile_info;
+  (void)num_planes;
+  (void)mi;
 
 #if CONFIG_REALTIME_ONLY || CONFIG_EXT_RECUR_PARTITIONS
   (void)seg_skip;
@@ -632,6 +638,10 @@ static AOM_INLINE void encode_rd_sb(AV1_COMP *cpi, ThreadData *td,
   MACROBLOCKD *const xd = &x->e_mbd;
 #endif
 
+#if CONFIG_EXT_RECUR_PARTITIONS
+  x->sms_bufs = td->sms_bufs;
+  x->reuse_inter_mode_cache_type = cpi->sf.inter_sf.reuse_erp_mode_flag;
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
   init_encode_rd_sb(cpi, td, tile_data, sms_root, &dummy_rdc, mi_row, mi_col,
                     1);
 

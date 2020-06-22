@@ -146,6 +146,10 @@ enum {
 // 4X4, 8X8, 16X16, 32X32, 64X64, 128X128
 #define SQR_BLOCK_SIZES 6
 
+#if CONFIG_EXT_RECUR_PARTITIONS
+#define KEEP_PARTITION_SPLIT 0
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
+
 //  Partition types.  R: Recursive
 //
 //  NONE          HORZ          VERT          SPLIT

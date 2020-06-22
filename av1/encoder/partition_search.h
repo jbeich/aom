@@ -15,6 +15,7 @@
 #include "av1/encoder/block.h"
 #include "av1/encoder/encoder.h"
 #include "av1/encoder/encodeframe.h"
+#include "av1/encoder/encodeframe_utils.h"
 #include "av1/encoder/tokenize.h"
 
 void av1_set_offsets_without_segment_id(const AV1_COMP *const cpi,
@@ -48,5 +49,8 @@ void av1_build_partition_tree_fixed_partitioning(AV1_COMMON *const cm,
                                                  BLOCK_SIZE bsize,
                                                  PARTITION_TREE *ptree);
 #endif  // CONFIG_EXT_RECUR_PARTITIONS
+void setup_block_rdmult(const AV1_COMP *const cpi, MACROBLOCK *const x,
+                        int mi_row, int mi_col, BLOCK_SIZE bsize,
+                        AQ_MODE aq_mode, MB_MODE_INFO *mbmi);
 
 #endif  // AOM_AV1_ENCODER_PARTITION_SEARCH_H_

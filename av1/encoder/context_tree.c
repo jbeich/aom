@@ -11,6 +11,7 @@
 
 #include "av1/encoder/context_tree.h"
 #include "av1/encoder/encoder.h"
+#include "av1/encoder/rd.h"
 
 static const BLOCK_SIZE square[MAX_SB_SIZE_LOG2 - 1] = {
   BLOCK_4X4, BLOCK_8X8, BLOCK_16X16, BLOCK_32X32, BLOCK_64X64, BLOCK_128X128,
@@ -116,7 +117,7 @@ PICK_MODE_CONTEXT *av1_alloc_pmc(const AV1_COMMON *cm, int mi_row, int mi_col,
           aom_memalign(32, num_pix * sizeof(*ctx->color_index_map[i])));
     }
   }
-
+  av1_invalid_rd_stats(&ctx->rd_stats);
   return ctx;
 }
 
@@ -478,6 +479,17 @@ void av1_free_sms_tree(ThreadData *td) {
 }
 
 #if CONFIG_EXT_RECUR_PARTITIONS
+void av1_setup_sms_bufs(AV1_COMMON *cm, ThreadData *td) {
+  CHECK_MEM_ERROR(cm, td->sms_bufs, aom_malloc(sizeof(*td->sms_bufs)));
+}
+
+void av1_free_sms_bufs(ThreadData *td) {
+  if (td->sms_bufs != NULL) {
+    aom_free(td->sms_bufs);
+    td->sms_bufs = NULL;
+  }
+}
+
 PC_TREE *counterpart_from_different_partition(PC_TREE *pc_tree,
                                               PC_TREE *target);
 
