@@ -461,6 +461,7 @@ static AOM_INLINE void encode_nonrd_sb(AV1_COMP *cpi, ThreadData *td,
                                        const int seg_skip) {
   AV1_COMMON *const cm = &cpi->common;
   MACROBLOCK *const x = &td->mb;
+  MACROBLOCKD *const xd = &x->e_mbd;
   const SPEED_FEATURES *const sf = &cpi->sf;
   const TileInfo *const tile_info = &tile_data->tile_info;
   MB_MODE_INFO **mi = cm->mi_params.mi_grid_base +
@@ -510,22 +511,24 @@ static AOM_INLINE void encode_nonrd_sb(AV1_COMP *cpi, ThreadData *td,
        cm->seq_params.enable_sdp)
           ? 2
           : 1;
-  MACROBLOCKD *const xd = &x->e_mbd;
   for (int loop_idx = 0; loop_idx < total_loop_num; loop_idx++) {
     xd->tree_type =
         (total_loop_num == 1 ? SHARED_PART
                              : (loop_idx == 0 ? LUMA_PART : CHROMA_PART));
     td->mb.cb_offset[xd->tree_type == CHROMA_PART] = 0;
     PC_TREE *const pc_root = av1_alloc_pc_tree_node(sb_size);
-    av1_nonrd_use_partition(cpi, td, tile_data, mi, tp, mi_row, mi_col, sb_size,
-                            pc_root);
+    av1_reset_ptree_in_sbi(xd->sbi, xd->tree_type);
+    av1_nonrd_use_partition(
+        cpi, td, tile_data, mi, tp, mi_row, mi_col, sb_size, pc_root,
+        xd->sbi->ptree_root[av1_get_sdp_idx(xd->tree_type)]);
     av1_free_pc_tree_recursive(pc_root, av1_num_planes(cm), 0, 0);
   }
   xd->tree_type = SHARED_PART;
 #else
   PC_TREE *const pc_root = av1_alloc_pc_tree_node(sb_size);
+  av1_reset_ptree_in_sbi(xd->sbi);
   av1_nonrd_use_partition(cpi, td, tile_data, mi, tp, mi_row, mi_col, sb_size,
-                          pc_root);
+                          pc_root, xd->sbi->ptree_root);
   av1_free_pc_tree_recursive(pc_root, av1_num_planes(cm), 0, 0);
 #endif
 }
@@ -847,6 +850,7 @@ static AOM_INLINE void encode_sb_row(AV1_COMP *cpi, ThreadData *td,
     (*(enc_row_mt->sync_read_ptr))(row_mt_sync, sb_row, sb_col_in_tile);
     av1_reset_is_mi_coded_map(xd, cm->seq_params.mib_size);
 
+    av1_set_sb_info(cm, xd, mi_row, mi_col);
     if (tile_data->allow_update_cdf && row_mt_enabled &&
         (tile_info->mi_row_start != mi_row)) {
       if ((tile_info->mi_col_start == mi_col)) {
