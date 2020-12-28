@@ -650,7 +650,22 @@ typedef struct macroblockd {
    * block shares the same tree or not.
    */
   TREE_TYPE tree_type;
-#endif
+
+  /*!
+   * An array for recording whether an mi(4x4) is coded. Reset at sb level.
+   */
+  // TODO(any): Convert to bit field instead.
+  uint8_t is_mi_coded[2][MAX_MIB_SQUARE];
+#else
+  /*!
+   * An array for recording whether an mi(4x4) is coded. Reset at sb level.
+   */
+  uint8_t is_mi_coded[MAX_MIB_SQUARE];
+#endif  // CONFIG_SDP
+  /*!
+   * Stride of the is_mi_coded array.
+   */
+  int is_mi_coded_stride;
 
   /*!
    * Scale factors for reference frames of the current block.
@@ -1346,6 +1361,12 @@ void av1_set_entropy_contexts(const MACROBLOCKD *xd,
                               BLOCK_SIZE plane_bsize, TX_SIZE tx_size,
                               int has_eob, int aoff, int loff);
 
+void av1_reset_is_mi_coded_map(MACROBLOCKD *xd, int stride);
+void av1_mark_block_as_coded(MACROBLOCKD *xd, BLOCK_SIZE bsize,
+                             BLOCK_SIZE sb_size);
+void av1_mark_block_as_not_coded(MACROBLOCKD *xd, int mi_row, int mi_col,
+                                 BLOCK_SIZE bsize, BLOCK_SIZE sb_size);
+
 #define MAX_INTERINTRA_SB_SQUARE 32 * 32
 static INLINE int is_interintra_mode(const MB_MODE_INFO *mbmi) {
   return (mbmi->ref_frame[0] > INTRA_FRAME &&
@@ -1559,6 +1580,17 @@ static INLINE int av1_get_max_eob(TX_SIZE tx_size) {
   }
   return tx_size_2d[tx_size];
 }
+
+#if CONFIG_SDP
+static INLINE int av1_get_sdp_idx(TREE_TYPE tree_type) {
+  switch (tree_type) {
+    case SHARED_PART:
+    case LUMA_PART: return 0;
+    case CHROMA_PART: return 1; break;
+    default: assert(0 && "Invalid tree type"); return 0;
+  }
+}
+#endif  // CONFIG_SDP
 
 /*!\endcond */
 

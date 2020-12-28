@@ -44,6 +44,8 @@ extern "C" {
 #define MAX_MIB_SIZE_LOG2 (MAX_SB_SIZE_LOG2 - MI_SIZE_LOG2)
 #define MAX_MIB_SIZE (1 << MAX_MIB_SIZE_LOG2)
 
+#define MAX_MIB_SQUARE (MAX_MIB_SIZE * MAX_MIB_SIZE)
+
 // MI-units per min superblock
 #define MIN_MIB_SIZE_LOG2 (MIN_SB_SIZE_LOG2 - MI_SIZE_LOG2)
 

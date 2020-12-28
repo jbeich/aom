@@ -28,6 +28,69 @@ PREDICTION_MODE av1_above_block_mode(const MB_MODE_INFO *above_mi) {
   return above_mi->mode;
 }
 
+void av1_reset_is_mi_coded_map(MACROBLOCKD *xd, int stride) {
+  av1_zero(xd->is_mi_coded);
+  xd->is_mi_coded_stride = stride;
+}
+
+void av1_mark_block_as_coded(MACROBLOCKD *xd, BLOCK_SIZE bsize,
+                             BLOCK_SIZE sb_size) {
+  const int mi_row = xd->mi_row;
+  const int mi_col = xd->mi_col;
+  const int sb_mi_size = mi_size_wide[sb_size];
+  const int mi_row_offset = mi_row & (sb_mi_size - 1);
+  const int mi_col_offset = mi_col & (sb_mi_size - 1);
+
+  for (int r = 0; r < mi_size_high[bsize]; ++r)
+    for (int c = 0; c < mi_size_wide[bsize]; ++c) {
+      const int pos =
+          (mi_row_offset + r) * xd->is_mi_coded_stride + mi_col_offset + c;
+#if CONFIG_SDP
+      switch (xd->tree_type) {
+        case SHARED_PART:
+          xd->is_mi_coded[0][pos] = 1;
+          xd->is_mi_coded[1][pos] = 1;
+          break;
+        case LUMA_PART: xd->is_mi_coded[0][pos] = 1; break;
+        case CHROMA_PART: xd->is_mi_coded[1][pos] = 1; break;
+        default: assert(0 && "Invalid tree type");
+      }
+#else
+      xd->is_mi_coded[pos] = 1;
+#endif  // CONFIG_SDP
+    }
+}
+
+void av1_mark_block_as_not_coded(MACROBLOCKD *xd, int mi_row, int mi_col,
+                                 BLOCK_SIZE bsize, BLOCK_SIZE sb_size) {
+  const int sb_mi_size = mi_size_wide[sb_size];
+  const int mi_row_offset = mi_row & (sb_mi_size - 1);
+  const int mi_col_offset = mi_col & (sb_mi_size - 1);
+
+  for (int r = 0; r < mi_size_high[bsize]; ++r) {
+    const int pos =
+        (mi_row_offset + r) * xd->is_mi_coded_stride + mi_col_offset;
+#if CONFIG_SDP
+    uint8_t *row_ptr_luma = &xd->is_mi_coded[0][pos];
+    uint8_t *row_ptr_chroma = &xd->is_mi_coded[1][pos];
+    switch (xd->tree_type) {
+      case SHARED_PART:
+        av1_zero_array(row_ptr_luma, mi_size_wide[bsize]);
+        av1_zero_array(row_ptr_chroma, mi_size_wide[bsize]);
+        break;
+      case LUMA_PART: av1_zero_array(row_ptr_luma, mi_size_wide[bsize]); break;
+      case CHROMA_PART:
+        av1_zero_array(row_ptr_chroma, mi_size_wide[bsize]);
+        break;
+      default: assert(0 && "Invalid tree type");
+    }
+#else
+    uint8_t *row_ptr = &xd->is_mi_coded[pos];
+    av1_zero_array(row_ptr, mi_size_wide[bsize]);
+#endif  // CONFIG_SDP
+  }
+}
+
 void av1_set_entropy_contexts(const MACROBLOCKD *xd,
                               struct macroblockd_plane *pd, int plane,
                               BLOCK_SIZE plane_bsize, TX_SIZE tx_size,
@@ -57,6 +120,7 @@ void av1_set_entropy_contexts(const MACROBLOCKD *xd,
     memset(l, has_eob, sizeof(*l) * txs_high);
   }
 }
+
 void av1_reset_entropy_context(MACROBLOCKD *xd, BLOCK_SIZE bsize,
                                const int num_planes) {
   assert(bsize < BLOCK_SIZES_ALL);

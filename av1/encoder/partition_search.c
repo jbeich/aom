@@ -497,6 +497,8 @@ static void encode_superblock(const AV1_COMP *const cpi, TileDataEnc *tile_data,
     }
   }
 #endif
+
+  av1_mark_block_as_coded(xd, bsize, cm->seq_params.sb_size);
 }
 
 static void setup_block_rdmult(const AV1_COMP *const cpi, MACROBLOCK *const x,
@@ -1803,7 +1805,7 @@ void av1_rd_use_partition(AV1_COMP *cpi, ThreadData *td, TileDataEnc *tile_data,
         none_rdc.rdcost = RDCOST(x->rdmult, none_rdc.rate, none_rdc.dist);
       }
 
-      av1_restore_context(x, &x_ctx, mi_row, mi_col, bsize, num_planes);
+      av1_restore_context(cm, x, &x_ctx, mi_row, mi_col, bsize, num_planes);
 #if CONFIG_SDP
       mib[0]->sb_type[plane_type] = bs_type;
 #else
@@ -1943,7 +1945,7 @@ void av1_rd_use_partition(AV1_COMP *cpi, ThreadData *td, TileDataEnc *tile_data,
     chosen_rdc.rate = 0;
     chosen_rdc.dist = 0;
 
-    av1_restore_context(x, &x_ctx, mi_row, mi_col, bsize, num_planes);
+    av1_restore_context(cm, x, &x_ctx, mi_row, mi_col, bsize, num_planes);
     pc_tree->partitioning = PARTITION_SPLIT;
 
     // Split partition.
@@ -1965,7 +1967,7 @@ void av1_rd_use_partition(AV1_COMP *cpi, ThreadData *td, TileDataEnc *tile_data,
                     PARTITION_SPLIT, split_subsize, pc_tree->split[i]->none,
                     invalid_rdc, PICK_MODE_RD);
 
-      av1_restore_context(x, &x_ctx, mi_row, mi_col, bsize, num_planes);
+      av1_restore_context(cm, x, &x_ctx, mi_row, mi_col, bsize, num_planes);
       if (tmp_rdc.rate == INT_MAX || tmp_rdc.dist == INT64_MAX) {
         av1_invalid_rd_stats(&chosen_rdc);
         break;
@@ -2013,7 +2015,7 @@ void av1_rd_use_partition(AV1_COMP *cpi, ThreadData *td, TileDataEnc *tile_data,
     chosen_rdc = none_rdc;
   }
 
-  av1_restore_context(x, &x_ctx, mi_row, mi_col, bsize, num_planes);
+  av1_restore_context(cm, x, &x_ctx, mi_row, mi_col, bsize, num_planes);
 
   // We must have chosen a partitioning and encoding or we'll fail later on.
   // No other opportunities for success.
@@ -2313,7 +2315,7 @@ void av1_nonrd_use_partition(AV1_COMP *cpi, ThreadData *td,
         none_rdc.rate += mode_costs->partition_cost[pl][PARTITION_NONE];
 #endif
         none_rdc.rdcost = RDCOST(x->rdmult, none_rdc.rate, none_rdc.dist);
-        av1_restore_context(x, &x_ctx, mi_row, mi_col, bsize, 3);
+        av1_restore_context(cm, x, &x_ctx, mi_row, mi_col, bsize, 3);
 
         for (int i = 0; i < SUB_PARTITIONS_SPLIT; i++) {
           av1_invalid_rd_stats(&block_rdc);
@@ -2343,7 +2345,7 @@ void av1_nonrd_use_partition(AV1_COMP *cpi, ThreadData *td,
         split_rdc.rate += mode_costs->partition_cost[pl][PARTITION_SPLIT];
 #endif
         split_rdc.rdcost = RDCOST(x->rdmult, split_rdc.rate, split_rdc.dist);
-        av1_restore_context(x, &x_ctx, mi_row, mi_col, bsize, 3);
+        av1_restore_context(cm, x, &x_ctx, mi_row, mi_col, bsize, 3);
 
         if (none_rdc.rdcost < split_rdc.rdcost) {
 #if CONFIG_SDP
@@ -2446,7 +2448,7 @@ void av1_nonrd_use_partition(AV1_COMP *cpi, ThreadData *td,
         none_rdc.rate += mode_costs->partition_cost[pl][PARTITION_NONE];
 #endif
         none_rdc.rdcost = RDCOST(x->rdmult, none_rdc.rate, none_rdc.dist);
-        av1_restore_context(x, &x_ctx, mi_row, mi_col, bsize, 3);
+        av1_restore_context(cm, x, &x_ctx, mi_row, mi_col, bsize, 3);
         if (cpi->sf.rt_sf.nonrd_check_partition_merge_mode != 2 ||
             none_rdc.skip_txfm != 1 || pc_tree->none->mic.mode == NEWMV) {
           av1_init_rd_stats(&split_rdc);
@@ -2476,7 +2478,7 @@ void av1_nonrd_use_partition(AV1_COMP *cpi, ThreadData *td,
                            mi_col + x_idx, 1, subsize, PARTITION_NONE,
                            pc_tree->split[i]->none, NULL);
           }
-          av1_restore_context(x, &x_ctx, mi_row, mi_col, bsize, 3);
+          av1_restore_context(cm, x, &x_ctx, mi_row, mi_col, bsize, 3);
 #if CONFIG_SDP
           split_rdc.rate +=
               mode_costs->partition_cost[xd->tree_type == CHROMA_PART][pl]
@@ -3005,7 +3007,7 @@ static void rectangular_partition_search(
       if (rect_part_win_info != NULL)
         rect_part_win_info->rect_part_win[i] = false;
     }
-    av1_restore_context(x, x_ctx, blk_params.mi_row, blk_params.mi_col,
+    av1_restore_context(cm, x, x_ctx, blk_params.mi_row, blk_params.mi_col,
                         blk_params.bsize, av1_num_planes(cm));
   }
 }
@@ -3052,7 +3054,7 @@ static void rd_pick_ab_part(
     partition_timer_on = 0;
   }
 #endif
-  av1_restore_context(x, x_ctx, mi_row, mi_col, bsize, av1_num_planes(cm));
+  av1_restore_context(cm, x, x_ctx, mi_row, mi_col, bsize, av1_num_planes(cm));
 }
 
 // Check if AB partitions search is allowed.
@@ -3283,7 +3285,7 @@ static void rd_pick_4partition(
     partition_timer_on = 0;
   }
 #endif
-  av1_restore_context(x, x_ctx, blk_params.mi_row, blk_params.mi_col,
+  av1_restore_context(cm, x, x_ctx, blk_params.mi_row, blk_params.mi_col,
                       blk_params.bsize, av1_num_planes(cm));
 }
 
@@ -3619,7 +3621,7 @@ static void none_partition_search(
                                   pb_source_variance);
     }
   }
-  av1_restore_context(x, x_ctx, mi_row, mi_col, bsize, av1_num_planes(cm));
+  av1_restore_context(cm, x, x_ctx, mi_row, mi_col, bsize, av1_num_planes(cm));
 }
 
 // PARTITION_SPLIT search.
@@ -3746,7 +3748,7 @@ static void split_partition_search(
           !(partition_none_valid && partition_none_better);
     }
   }
-  av1_restore_context(x, x_ctx, mi_row, mi_col, bsize, av1_num_planes(cm));
+  av1_restore_context(cm, x, x_ctx, mi_row, mi_col, bsize, av1_num_planes(cm));
 }
 
 /*!\brief AV1 block partition search (full search).
