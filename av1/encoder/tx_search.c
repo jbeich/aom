@@ -3011,7 +3011,7 @@ static AOM_INLINE void block_rd_txfm(int plane, int block, int blk_row,
   if (plane == AOM_PLANE_Y && xd->cfl.store_y) {
 #endif
     assert(!is_inter || plane_bsize < BLOCK_8X8);
-    cfl_store_tx(xd, blk_row, blk_col, tx_size, plane_bsize);
+    cfl_store_tx(xd, blk_row, blk_col, tx_size);
   }
 
 #if CONFIG_RD_DEBUG
