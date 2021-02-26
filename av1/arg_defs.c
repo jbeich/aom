@@ -339,6 +339,12 @@ const av1_codec_arg_definitions_t g_av1_codec_arg_defs = {
                         "Enable semi decoupled partitioning for key frame"
                         "(0: false, 1: true (default))"),
 #endif
+#if CONFIG_EXT_RECUR_PARTITIONS
+  .disable_ml_partition_speed_features =
+      ARG_DEF(NULL, "disable_ml_partition_speed_features", 1,
+              "Disable ML models used for fast partititoning"
+              "(0: false, 1: true (default))"),
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
   .min_partition_size =
       ARG_DEF(NULL, "min-partition-size", 1,
               "Set min partition size "

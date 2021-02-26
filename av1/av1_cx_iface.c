@@ -110,8 +110,11 @@ struct av1_extracfg {
   int enable_ab_partitions;    // enable AB partitions for sequence
   int enable_1to4_partitions;  // enable 1:4 and 4:1 partitions for sequence
 #if CONFIG_SDP
-  int enable_sdp;                // enable semi-decoupled partitioning
-#endif                           // CONFIG_SDP
+  int enable_sdp;  // enable semi-decoupled partitioning
+#endif             // CONFIG_SDP
+#if CONFIG_EXT_RECUR_PARTITIONS
+  int disable_ml_partition_speed_features;
+#endif                           // CONFIG_EXT_RECUR_PARTITIONS
   int min_partition_size;        // min partition size [4,8,16,32,64,128]
   int max_partition_size;        // max partition size [4,8,16,32,64,128]
   int enable_intra_edge_filter;  // enable intra-edge filter for sequence
@@ -357,6 +360,9 @@ static struct av1_extracfg default_extra_cfg = {
 #if CONFIG_SDP
   1,    // enable semi-decoupled partitioning
 #endif  // CONFIG_SDP
+#if CONFIG_EXT_RECUR_PARTITIONS
+  1,    // disable ML based partition speed up features
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
   4,    // min_partition_size
   128,  // max_partition_size
   1,    // enable intra edge filter
@@ -772,6 +778,10 @@ static void update_encoder_config(cfg_options_t *cfg,
 #if CONFIG_SDP
   cfg->enable_sdp = extra_cfg->enable_sdp;
 #endif
+#if CONFIG_EXT_RECUR_PARTITIONS
+  cfg->disable_ml_partition_speed_features =
+      extra_cfg->disable_ml_partition_speed_features;
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
   cfg->max_partition_size = extra_cfg->max_partition_size;
   cfg->min_partition_size = extra_cfg->min_partition_size;
   cfg->enable_intra_edge_filter = extra_cfg->enable_intra_edge_filter;
@@ -823,6 +833,10 @@ static void update_default_encoder_config(const cfg_options_t *cfg,
 #if CONFIG_SDP
   extra_cfg->enable_sdp = cfg->enable_sdp;
 #endif
+#if CONFIG_EXT_RECUR_PARTITIONS
+  extra_cfg->disable_ml_partition_speed_features =
+      cfg->disable_ml_partition_speed_features;
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
   extra_cfg->max_partition_size = cfg->max_partition_size;
   extra_cfg->min_partition_size = cfg->min_partition_size;
   extra_cfg->enable_intra_edge_filter = cfg->enable_intra_edge_filter;
@@ -1197,6 +1211,10 @@ static aom_codec_err_t set_encoder_config(AV1EncoderConfig *oxcf,
 #if CONFIG_SDP
   part_cfg->enable_sdp = extra_cfg->enable_sdp;
 #endif
+#if CONFIG_EXT_RECUR_PARTITIONS
+  part_cfg->disable_ml_partition_speed_features =
+      extra_cfg->disable_ml_partition_speed_features;
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
   part_cfg->min_partition_size = extra_cfg->min_partition_size;
   part_cfg->max_partition_size = extra_cfg->max_partition_size;
 
@@ -3337,6 +3355,14 @@ static aom_codec_err_t encoder_set_option(aom_codec_alg_priv_t *ctx,
                               err_string)) {
     extra_cfg.enable_sdp = arg_parse_int_helper(&arg, err_string);
 #endif
+#if CONFIG_EXT_RECUR_PARTITIONS
+  } else if (arg_match_helper(
+                 &arg,
+                 &g_av1_codec_arg_defs.disable_ml_partition_speed_features,
+                 argv, err_string)) {
+    extra_cfg.disable_ml_partition_speed_features =
+        arg_parse_int_helper(&arg, err_string);
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
   } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.min_partition_size,
                               argv, err_string)) {
     extra_cfg.min_partition_size = arg_parse_int_helper(&arg, err_string);
@@ -3738,8 +3764,11 @@ static const aom_codec_enc_cfg_t encoder_usage_cfg[] = {
       { -1, -1, -1, -1, -1 },  // fixed_qp_offsets
       { 0, 128, 128, 4, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
 #if CONFIG_SDP
-        1,
-#endif  // CONFIG_SDP
+        1,  // enable_sdp
+#endif
+#if CONFIG_EXT_RECUR_PARTITIONS
+        1,  // disable_ml_partition_speed_features
+#endif      // CONFIG_EXT_RECUR_PARTITIONS
 #if !CONFIG_REMOVE_DIST_WTD_COMP
         1,
 #endif  // !CONFIG_REMOVE_DIST_WTD_COMP
@@ -3816,8 +3845,11 @@ static const aom_codec_enc_cfg_t encoder_usage_cfg[] = {
       { -1, -1, -1, -1, -1 },  // fixed_qp_offsets
       { 0, 128, 128, 4, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
 #if CONFIG_SDP
-        1,
+        1,  // enable_sdp
 #endif
+#if CONFIG_EXT_RECUR_PARTITIONS
+        1,  // disable_ml_partition_speed_features
+#endif      // CONFIG_EXT_RECUR_PARTITIONS
 #if !CONFIG_REMOVE_DIST_WTD_COMP
         1,
 #endif  // !CONFIG_REMOVE_DIST_WTD_COMP

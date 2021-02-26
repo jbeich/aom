@@ -401,11 +401,18 @@ void av1_build_interintra_predictor(const AV1_COMMON *cm, MACROBLOCKD *xd,
                                     const BUFFER_SET *ctx, int plane,
                                     BLOCK_SIZE bsize);
 
+#if CONFIG_EXT_RECUR_PARTITIONS
+void av1_build_intra_predictors_for_interintra(const AV1_COMMON *cm,
+                                               MACROBLOCKD *xd, int plane,
+                                               const BUFFER_SET *ctx,
+                                               uint8_t *dst, int dst_stride);
+#else
 void av1_build_intra_predictors_for_interintra(const AV1_COMMON *cm,
                                                MACROBLOCKD *xd,
                                                BLOCK_SIZE bsize, int plane,
                                                const BUFFER_SET *ctx,
                                                uint8_t *dst, int dst_stride);
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
 
 void av1_combine_interintra(MACROBLOCKD *xd, BLOCK_SIZE bsize, int plane,
                             const uint8_t *inter_pred, int inter_stride,

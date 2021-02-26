@@ -28,7 +28,8 @@ void av1_set_offsets(const AV1_COMP *const cpi, const TileInfo *const tile,
 void av1_rd_use_partition(AV1_COMP *cpi, ThreadData *td, TileDataEnc *tile_data,
                           MB_MODE_INFO **mib, TokenExtra **tp, int mi_row,
                           int mi_col, BLOCK_SIZE bsize, int *rate,
-                          int64_t *dist, int do_recon, PC_TREE *pc_tree);
+                          int64_t *dist, int do_recon, PARTITION_TREE *ptree,
+                          PC_TREE *pc_tree);
 void av1_nonrd_use_partition(AV1_COMP *cpi, ThreadData *td,
                              TileDataEnc *tile_data, MB_MODE_INFO **mib,
                              TokenExtra **tp, int mi_row, int mi_col,
@@ -41,5 +42,11 @@ bool av1_rd_pick_partition(AV1_COMP *const cpi, ThreadData *td,
                            SIMPLE_MOTION_DATA_TREE *sms_tree, int64_t *none_rd,
                            SB_MULTI_PASS_MODE multi_pass_mode,
                            RD_RECT_PART_WIN_INFO *rect_part_win_info);
+#if CONFIG_EXT_RECUR_PARTITIONS
+void av1_build_partition_tree_fixed_partitioning(AV1_COMMON *const cm,
+                                                 int mi_row, int mi_col,
+                                                 BLOCK_SIZE bsize,
+                                                 PARTITION_TREE *ptree);
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
 
 #endif  // AOM_AV1_ENCODER_PARTITION_SEARCH_H_

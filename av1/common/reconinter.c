@@ -818,20 +818,16 @@ static void build_inter_predictors_sub8x8(
   const BLOCK_SIZE plane_bsize = plane ? mi->chroma_ref_info.bsize_base : bsize;
   const int b8_w = block_size_wide[plane_bsize] >> ss_x;
   const int b8_h = block_size_high[plane_bsize] >> ss_y;
-  const int is_compound = has_second_ref(mi);
-  assert(!is_compound);
   assert(!is_intrabc_block(mi));
 
   // For sub8x8 chroma blocks, we may be covering more than one luma block's
   // worth of pixels. Thus (mi_x, mi_y) may not be the correct coordinates for
   // the top-left corner of the prediction source - the correct top-left corner
   // is at (pre_x, pre_y).
-  const int mi_row = -xd->mb_to_top_edge >> (3 + MI_SIZE_LOG2);
-  const int mi_col = -xd->mb_to_left_edge >> (3 + MI_SIZE_LOG2);
   const int row_start =
-      plane ? (mi->chroma_ref_info.mi_row_chroma_base - mi_row) : 0;
+      plane ? (mi->chroma_ref_info.mi_row_chroma_base - xd->mi_row) : 0;
   const int col_start =
-      plane ? (mi->chroma_ref_info.mi_col_chroma_base - mi_col) : 0;
+      plane ? (mi->chroma_ref_info.mi_col_chroma_base - xd->mi_col) : 0;
   const int pre_x = (mi_x + MI_SIZE * col_start) >> ss_x;
   const int pre_y = (mi_y + MI_SIZE * row_start) >> ss_y;
 
@@ -840,6 +836,13 @@ static void build_inter_predictors_sub8x8(
     int col = col_start;
     for (int x = 0; x < b8_w; x += b4_w) {
       MB_MODE_INFO *this_mbmi = xd->mi[row * xd->mi_stride + col];
+#if CONFIG_EXT_RECUR_PARTITIONS
+      // TODO(yuec): enabling compound prediction in none sub8x8 mbs in the
+      // group
+      bool is_compound = 0;
+#else
+      bool is_compound = has_second_ref(this_mbmi);
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
       struct buf_2d *const dst_buf = &pd->dst;
       uint8_t *dst = dst_buf->buf + dst_buf->stride * y + x;
       int ref = 0;
@@ -857,7 +860,6 @@ static void build_inter_predictors_sub8x8(
       };
 
       const MV mv = this_mbmi->mv[ref].as_mv;
-
       InterPredParams inter_pred_params;
       av1_init_inter_params(&inter_pred_params, b4_w, b4_h, pre_y + y,
                             pre_x + x, pd->subsampling_x, pd->subsampling_y,
@@ -880,9 +882,9 @@ static void build_inter_predictors_sub8x8(
                                     &inter_pred_params, xd, mi_x + x, mi_y + y,
                                     ref, mc_buf, calc_subpel_params_func);
 
-      ++col;
+      col += mi_size_wide[bsize];
     }
-    ++row;
+    row += mi_size_high[bsize];
   }
 }
 
@@ -976,7 +978,9 @@ void av1_build_inter_predictors(const AV1_COMMON *cm, MACROBLOCKD *xd,
                                 int mi_y, uint8_t **mc_buf,
                                 CalcSubpelParamsFunc calc_subpel_params_func) {
   if (is_sub8x8_inter(xd, mi, plane, is_intrabc_block(mi), build_for_obmc)) {
+#if !CONFIG_EXT_RECUR_PARTITIONS
     assert(bw < 8 || bh < 8);
+#endif  // !CONFIG_EXT_RECUR_PARTITIONS
     build_inter_predictors_sub8x8(cm, xd, plane, mi, mi_x, mi_y, mc_buf,
                                   calc_subpel_params_func);
   } else {
@@ -1076,9 +1080,12 @@ void av1_count_overlappable_neighbors(const AV1_COMMON *cm, MACROBLOCKD *xd) {
   mbmi->overlappable_neighbors[0] = 0;
   mbmi->overlappable_neighbors[1] = 0;
 #if CONFIG_SDP
-  if (!is_motion_variation_allowed_bsize(mbmi->sb_type[PLANE_TYPE_Y])) return;
+  if (!is_motion_variation_allowed_bsize(mbmi->sb_type[PLANE_TYPE_Y],
+                                         xd->mi_row, xd->mi_col))
+    return;
 #else
-  if (!is_motion_variation_allowed_bsize(mbmi->sb_type)) return;
+  if (!is_motion_variation_allowed_bsize(mbmi->sb_type, xd->mi_row, xd->mi_col))
+    return;
 #endif
 
   foreach_overlappable_nb_above(cm, xd, INT_MAX, increment_int_ptr,
@@ -1094,8 +1101,6 @@ void av1_count_overlappable_neighbors(const AV1_COMMON *cm, MACROBLOCKD *xd) {
 
 int av1_skip_u4x4_pred_in_obmc(BLOCK_SIZE bsize,
                                const struct macroblockd_plane *pd, int dir) {
-  assert(is_motion_variation_allowed_bsize(bsize));
-
   const BLOCK_SIZE bsize_plane =
       get_plane_block_size(bsize, pd->subsampling_x, pd->subsampling_y);
   switch (bsize_plane) {
@@ -1383,15 +1388,26 @@ static AOM_INLINE void combine_interintra_highbd(
                             bd);
 }
 
+#if CONFIG_EXT_RECUR_PARTITIONS
+void av1_build_intra_predictors_for_interintra(const AV1_COMMON *cm,
+                                               MACROBLOCKD *xd, int plane,
+                                               const BUFFER_SET *ctx,
+                                               uint8_t *dst, int dst_stride) {
+#else
 void av1_build_intra_predictors_for_interintra(const AV1_COMMON *cm,
                                                MACROBLOCKD *xd,
                                                BLOCK_SIZE bsize, int plane,
                                                const BUFFER_SET *ctx,
                                                uint8_t *dst, int dst_stride) {
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
   struct macroblockd_plane *const pd = &xd->plane[plane];
   const int ssx = xd->plane[plane].subsampling_x;
   const int ssy = xd->plane[plane].subsampling_y;
+#if CONFIG_EXT_RECUR_PARTITIONS
+  BLOCK_SIZE plane_bsize = get_mb_plane_block_size(xd->mi[0], plane, ssx, ssy);
+#else
   BLOCK_SIZE plane_bsize = get_plane_block_size(bsize, ssx, ssy);
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
   PREDICTION_MODE mode = interintra_to_intra_mode[xd->mi[0]->interintra_mode];
   assert(xd->mi[0]->angle_delta[PLANE_TYPE_Y] == 0);
   assert(xd->mi[0]->angle_delta[PLANE_TYPE_UV] == 0);
@@ -1413,7 +1429,11 @@ void av1_combine_interintra(MACROBLOCKD *xd, BLOCK_SIZE bsize, int plane,
                             const uint8_t *intra_pred, int intra_stride) {
   const int ssx = xd->plane[plane].subsampling_x;
   const int ssy = xd->plane[plane].subsampling_y;
-  const BLOCK_SIZE plane_bsize = get_plane_block_size(bsize, ssx, ssy);
+#if CONFIG_EXT_RECUR_PARTITIONS
+  BLOCK_SIZE plane_bsize = get_mb_plane_block_size(xd->mi[0], plane, ssx, ssy);
+#else
+  BLOCK_SIZE plane_bsize = get_plane_block_size(bsize, ssx, ssy);
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
 
   if (is_cur_buf_hbd(xd)) {
     combine_interintra_highbd(
@@ -1439,15 +1459,25 @@ void av1_build_interintra_predictor(const AV1_COMMON *cm, MACROBLOCKD *xd,
   assert(bsize < BLOCK_SIZES_ALL);
   if (is_cur_buf_hbd(xd)) {
     DECLARE_ALIGNED(16, uint16_t, intrapredictor[MAX_SB_SQUARE]);
+#if CONFIG_EXT_RECUR_PARTITIONS
+    av1_build_intra_predictors_for_interintra(
+        cm, xd, plane, ctx, CONVERT_TO_BYTEPTR(intrapredictor), MAX_SB_SIZE);
+#else
     av1_build_intra_predictors_for_interintra(
         cm, xd, bsize, plane, ctx, CONVERT_TO_BYTEPTR(intrapredictor),
         MAX_SB_SIZE);
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
     av1_combine_interintra(xd, bsize, plane, pred, stride,
                            CONVERT_TO_BYTEPTR(intrapredictor), MAX_SB_SIZE);
   } else {
     DECLARE_ALIGNED(16, uint8_t, intrapredictor[MAX_SB_SQUARE]);
+#if CONFIG_EXT_RECUR_PARTITIONS
+    av1_build_intra_predictors_for_interintra(cm, xd, plane, ctx,
+                                              intrapredictor, MAX_SB_SIZE);
+#else
     av1_build_intra_predictors_for_interintra(cm, xd, bsize, plane, ctx,
                                               intrapredictor, MAX_SB_SIZE);
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
     av1_combine_interintra(xd, bsize, plane, pred, stride, intrapredictor,
                            MAX_SB_SIZE);
   }

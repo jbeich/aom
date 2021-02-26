@@ -12,6 +12,7 @@
 #include <assert.h>
 #include <stddef.h>
 
+#include "av1/common/blockd.h"
 #include "config/aom_config.h"
 #include "config/aom_dsp_rtcd.h"
 #include "config/aom_scale_rtcd.h"
@@ -297,8 +298,8 @@ static AOM_INLINE void decode_reconstruct_tx(
                                                          blk_col)];
 #else
   const TX_SIZE plane_tx_size =
-      plane ? av1_get_max_uv_txsize(mbmi->sb_type, pd->subsampling_x,
-                                    pd->subsampling_y)
+      plane ? av1_get_max_uv_txsize(mbmi->chroma_ref_info.bsize_base,
+                                    pd->subsampling_x, pd->subsampling_y)
             : mbmi->inter_tx_size[av1_get_txb_size_index(plane_bsize, blk_row,
                                                          blk_col)];
 #endif
@@ -400,7 +401,6 @@ static AOM_INLINE void decode_mbmi_block(AV1Decoder *const pbi,
                                          BLOCK_SIZE bsize,
                                          PARTITION_TREE *parent, int index) {
   AV1_COMMON *const cm = &pbi->common;
-  const SequenceHeader *const seq_params = &cm->seq_params;
   const int bw = mi_size_wide[bsize];
   const int bh = mi_size_high[bsize];
   const int x_mis = AOMMIN(bw, cm->mi_params.mi_cols - mi_col);
@@ -414,14 +414,16 @@ static AOM_INLINE void decode_mbmi_block(AV1Decoder *const pbi,
               index);
   xd->mi[0]->partition = partition;
   av1_read_mode_info(pbi, dcb, r, x_mis, y_mis);
-  if (bsize >= BLOCK_8X8 &&
-      (seq_params->subsampling_x || seq_params->subsampling_y)) {
-    const BLOCK_SIZE uv_subsize =
-        ss_size_lookup[bsize][seq_params->subsampling_x]
-                      [seq_params->subsampling_y];
-    if (uv_subsize == BLOCK_INVALID)
-      aom_internal_error(xd->error_info, AOM_CODEC_CORRUPT_FRAME,
-                         "Invalid block size.");
+
+  const struct macroblockd_plane *const pd_u = &xd->plane[1];
+  const BLOCK_SIZE chroma_bsize_base = xd->mi[0]->chroma_ref_info.bsize_base;
+  assert(chroma_bsize_base < BLOCK_SIZES_ALL);
+  if (get_plane_block_size(chroma_bsize_base, pd_u->subsampling_x,
+                           pd_u->subsampling_y) == BLOCK_INVALID) {
+    aom_internal_error(xd->error_info, AOM_CODEC_CORRUPT_FRAME,
+                       "Block size %dx%d invalid with this subsampling mode",
+                       block_size_wide[chroma_bsize_base],
+                       block_size_high[chroma_bsize_base]);
   }
 }
 
@@ -1043,8 +1045,13 @@ static AOM_INLINE void decode_token_recon_block(AV1Decoder *const pbi,
             const struct macroblockd_plane *const pd = &xd->plane[plane];
             const int ss_x = pd->subsampling_x;
             const int ss_y = pd->subsampling_y;
+#if CONFIG_EXT_RECUR_PARTITIONS
+            const BLOCK_SIZE plane_bsize =
+                get_mb_plane_block_size(mbmi, plane, ss_x, ss_y);
+#else
             const BLOCK_SIZE plane_bsize =
                 get_plane_block_size(bsize, ss_x, ss_y);
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
             const TX_SIZE max_tx_size =
                 get_vartx_max_txsize(xd, plane_bsize, plane);
             const int bh_var_tx = tx_size_high_unit[max_tx_size];
@@ -1348,12 +1355,14 @@ static AOM_INLINE void parse_decode_block(AV1Decoder *const pbi,
       }
     }
   }
-#if CONFIG_SDP
+#if CONFIG_EXT_RECUR_PARTITIONS
+  if (mbmi->skip_txfm) av1_reset_entropy_context(xd, num_planes);
+#elif CONFIG_SDP
   if (mbmi->skip_txfm[xd->tree_type == CHROMA_PART])
     av1_reset_entropy_context(xd, bsize, num_planes);
 #else
-  if (mbmi->skip_txfm) av1_reset_entropy_context(xd, bsize, num_planes);
-#endif
+if (mbmi->skip_txfm) av1_reset_entropy_context(xd, bsize, num_planes);
+#endif  // !CONFIG_EXT_RECUR_PARTITIONS && !CONFIG_SDP
 #if CONFIG_SDP
   decode_token_recon_block(pbi, td, r, partition, bsize);
 #else
@@ -1463,9 +1472,37 @@ static PARTITION_TYPE read_partition(MACROBLOCKD *xd, int mi_row, int mi_col,
                                      aom_reader *r, int has_rows, int has_cols,
                                      BLOCK_SIZE bsize) {
 #endif
+#if CONFIG_EXT_RECUR_PARTITIONS
+  if (!is_partition_point(bsize)) return PARTITION_NONE;
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
+
   const int ctx = partition_plane_context(xd, mi_row, mi_col, bsize);
   FRAME_CONTEXT *ec_ctx = xd->tile_ctx;
 
+#if CONFIG_EXT_RECUR_PARTITIONS
+  if (is_square_block(bsize)) {
+    if (!has_rows && has_cols) return PARTITION_HORZ;
+    if (has_rows && !has_cols) return PARTITION_VERT;
+
+    assert(ctx >= 0);
+    if (has_rows && has_cols) {
+      aom_cdf_prob *partition_cdf = ec_ctx->partition_cdf[ctx];
+
+      return (PARTITION_TYPE)aom_read_symbol(
+          r, partition_cdf, partition_cdf_length(bsize), ACCT_STR);
+    } else {  // !has_rows && !has_cols
+      aom_cdf_prob cdf[2] = { 16384, AOM_ICDF(CDF_PROB_TOP) };
+      return aom_read_cdf(r, cdf, 2, ACCT_STR) ? PARTITION_VERT
+                                               : PARTITION_HORZ;
+    }
+  } else {
+    aom_cdf_prob *partition_rec_cdf = ec_ctx->partition_rec_cdf[ctx];
+    const PARTITION_TYPE_REC symbol = (PARTITION_TYPE_REC)aom_read_symbol(
+        r, partition_rec_cdf, partition_rec_cdf_length(bsize), ACCT_STR);
+
+    return get_partition_from_symbol_rec_block(bsize, symbol);
+  }
+#else  // CONFIG_EXT_RECUR_PARTITIONS
   if (!has_rows && !has_cols) return PARTITION_SPLIT;
 
 #if CONFIG_SDP
@@ -1505,6 +1542,7 @@ static PARTITION_TYPE read_partition(MACROBLOCKD *xd, int mi_row, int mi_col,
     assert(cdf[1] == AOM_ICDF(CDF_PROB_TOP));
     return aom_read_cdf(r, cdf, 2, ACCT_STR) ? PARTITION_SPLIT : PARTITION_VERT;
   }
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
 }
 
 // TODO(slavarnway): eliminate bsize and subsize in future commits
@@ -1517,16 +1555,15 @@ static AOM_INLINE void decode_partition(AV1Decoder *const pbi,
   AV1_COMMON *const cm = &pbi->common;
   DecoderCodingBlock *const dcb = &td->dcb;
   MACROBLOCKD *const xd = &dcb->xd;
-  const int bw = mi_size_wide[bsize];
-  const int hbs = bw >> 1;
-  PARTITION_TYPE partition;
-  BLOCK_SIZE subsize;
-  const int quarter_step = bw / 4;
-  BLOCK_SIZE bsize2 = get_partition_subsize(bsize, PARTITION_SPLIT);
-  const int has_rows = (mi_row + hbs) < cm->mi_params.mi_rows;
-  const int has_cols = (mi_col + hbs) < cm->mi_params.mi_cols;
   const int ss_x = xd->plane[1].subsampling_x;
   const int ss_y = xd->plane[1].subsampling_y;
+  const int hbs_w = mi_size_wide[bsize] / 2;
+  const int hbs_h = mi_size_high[bsize] / 2;
+  const int qbs_w = mi_size_wide[bsize] / 4;
+  const int qbs_h = mi_size_high[bsize] / 4;
+  PARTITION_TYPE partition;
+  const int has_rows = (mi_row + hbs_h) < cm->mi_params.mi_rows;
+  const int has_cols = (mi_col + hbs_w) < cm->mi_params.mi_cols;
 
   if (mi_row >= cm->mi_params.mi_rows || mi_col >= cm->mi_params.mi_cols)
     return;
@@ -1561,15 +1598,17 @@ static AOM_INLINE void decode_partition(AV1Decoder *const pbi,
       }
     }
 #if CONFIG_SDP
-    partition = (bsize < BLOCK_8X8)
+    partition = !is_partition_point(bsize)
                     ? PARTITION_NONE
                     : read_partition(cm, xd, mi_row, mi_col, reader, has_rows,
                                      has_cols, bsize);
 #else
-    partition = (bsize < BLOCK_8X8) ? PARTITION_NONE
-                                    : read_partition(xd, mi_row, mi_col, reader,
-                                                     has_rows, has_cols, bsize);
+    partition = !is_partition_point(bsize)
+                    ? PARTITION_NONE
+                    : read_partition(xd, mi_row, mi_col, reader, has_rows,
+                                     has_cols, bsize);
 #endif
+
     ptree->partition = partition;
     ptree->bsize = bsize;
     ptree->mi_row = mi_row;
@@ -1582,16 +1621,32 @@ static AOM_INLINE void decode_partition(AV1Decoder *const pbi,
         parent ? parent->bsize : BLOCK_INVALID,
         parent ? parent->partition : PARTITION_NONE, ss_x, ss_y);
 
-    const int num_splittable_sub_blocks = partition == PARTITION_SPLIT ? 4 : 0;
-    if (num_splittable_sub_blocks > 0) {
-      for (int i = 0; i < num_splittable_sub_blocks; ++i) {
-        ptree->sub_tree[i] = av1_alloc_ptree_node(ptree, i);
-      }
+    switch (partition) {
+      case PARTITION_SPLIT:
+        ptree->sub_tree[0] = av1_alloc_ptree_node(ptree, 0);
+        ptree->sub_tree[1] = av1_alloc_ptree_node(ptree, 1);
+        ptree->sub_tree[2] = av1_alloc_ptree_node(ptree, 2);
+        ptree->sub_tree[3] = av1_alloc_ptree_node(ptree, 3);
+        break;
+#if CONFIG_EXT_RECUR_PARTITIONS
+      case PARTITION_HORZ:
+      case PARTITION_VERT:
+        ptree->sub_tree[0] = av1_alloc_ptree_node(ptree, 0);
+        ptree->sub_tree[1] = av1_alloc_ptree_node(ptree, 1);
+        break;
+      case PARTITION_HORZ_3:
+      case PARTITION_VERT_3:
+        ptree->sub_tree[0] = av1_alloc_ptree_node(ptree, 0);
+        ptree->sub_tree[1] = av1_alloc_ptree_node(ptree, 1);
+        ptree->sub_tree[2] = av1_alloc_ptree_node(ptree, 2);
+        break;
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
+      default: break;
     }
   } else {
     partition = ptree->partition;
   }
-  subsize = get_partition_subsize(bsize, partition);
+  const BLOCK_SIZE subsize = get_partition_subsize(bsize, partition);
   if (subsize == BLOCK_INVALID) {
     aom_internal_error(xd->error_info, AOM_CODEC_CORRUPT_FRAME,
                        "Partition is invalid for block size %dx%d",
@@ -1617,56 +1672,99 @@ static AOM_INLINE void decode_partition(AV1Decoder *const pbi,
   decode_partition(pbi, td, DEC_BLOCK_STX_ARG(db_r), (db_c), reader, \
                    (db_subsize), ptree->sub_tree[(index)], parse_decode_flag)
 
+#if !CONFIG_EXT_RECUR_PARTITIONS
+  const BLOCK_SIZE bsize2 = get_partition_subsize(bsize, PARTITION_SPLIT);
+#endif  // !CONFIG_EXT_RECUR_PARTITIONS
+
   switch (partition) {
     case PARTITION_NONE: DEC_BLOCK(mi_row, mi_col, subsize, 0); break;
     case PARTITION_HORZ:
+#if CONFIG_EXT_RECUR_PARTITIONS
+      DEC_PARTITION(mi_row, mi_col, subsize, 0);
+      if ((mi_row + hbs_h) < cm->mi_params.mi_rows)
+        DEC_PARTITION(mi_row + hbs_h, mi_col, subsize, 1);
+#else
       DEC_BLOCK(mi_row, mi_col, subsize, 0);
-      if (has_rows) DEC_BLOCK(mi_row + hbs, mi_col, subsize, 1);
+      if (has_rows) DEC_BLOCK(mi_row + hbs_h, mi_col, subsize, 1);
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
       break;
     case PARTITION_VERT:
+#if CONFIG_EXT_RECUR_PARTITIONS
+      DEC_PARTITION(mi_row, mi_col, subsize, 0);
+      if ((mi_col + hbs_w) < cm->mi_params.mi_cols)
+        DEC_PARTITION(mi_row, mi_col + hbs_w, subsize, 1);
+#else
       DEC_BLOCK(mi_row, mi_col, subsize, 0);
-      if (has_cols) DEC_BLOCK(mi_row, mi_col + hbs, subsize, 1);
+      if (has_cols) DEC_BLOCK(mi_row, mi_col + hbs_w, subsize, 1);
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
       break;
     case PARTITION_SPLIT:
       DEC_PARTITION(mi_row, mi_col, subsize, 0);
-      DEC_PARTITION(mi_row, mi_col + hbs, subsize, 1);
-      DEC_PARTITION(mi_row + hbs, mi_col, subsize, 2);
-      DEC_PARTITION(mi_row + hbs, mi_col + hbs, subsize, 3);
+      DEC_PARTITION(mi_row, mi_col + hbs_w, subsize, 1);
+      DEC_PARTITION(mi_row + hbs_h, mi_col, subsize, 2);
+      DEC_PARTITION(mi_row + hbs_h, mi_col + hbs_w, subsize, 3);
       break;
+#if CONFIG_EXT_RECUR_PARTITIONS
+    case PARTITION_HORZ_3: {
+      const BLOCK_SIZE bsize3 = get_partition_subsize(bsize, PARTITION_HORZ);
+      int this_mi_row = mi_row;
+      DEC_PARTITION(this_mi_row, mi_col, subsize, 0);
+      this_mi_row += qbs_h;
+      if (this_mi_row >= cm->mi_params.mi_rows) break;
+      DEC_PARTITION(this_mi_row, mi_col, bsize3, 1);
+      this_mi_row += 2 * qbs_h;
+      if (this_mi_row >= cm->mi_params.mi_rows) break;
+      DEC_PARTITION(this_mi_row, mi_col, subsize, 2);
+      break;
+    }
+    case PARTITION_VERT_3: {
+      const BLOCK_SIZE bsize3 = get_partition_subsize(bsize, PARTITION_VERT);
+      int this_mi_col = mi_col;
+      DEC_PARTITION(mi_row, this_mi_col, subsize, 0);
+      this_mi_col += qbs_w;
+      if (this_mi_col >= cm->mi_params.mi_cols) break;
+      DEC_PARTITION(mi_row, this_mi_col, bsize3, 1);
+      this_mi_col += 2 * qbs_w;
+      if (this_mi_col >= cm->mi_params.mi_cols) break;
+      DEC_PARTITION(mi_row, this_mi_col, subsize, 2);
+      break;
+    }
+#else
     case PARTITION_HORZ_A:
       DEC_BLOCK(mi_row, mi_col, bsize2, 0);
-      DEC_BLOCK(mi_row, mi_col + hbs, bsize2, 1);
-      DEC_BLOCK(mi_row + hbs, mi_col, subsize, 2);
+      DEC_BLOCK(mi_row, mi_col + hbs_w, bsize2, 1);
+      DEC_BLOCK(mi_row + hbs_h, mi_col, subsize, 2);
       break;
     case PARTITION_HORZ_B:
       DEC_BLOCK(mi_row, mi_col, subsize, 0);
-      DEC_BLOCK(mi_row + hbs, mi_col, bsize2, 1);
-      DEC_BLOCK(mi_row + hbs, mi_col + hbs, bsize2, 2);
+      DEC_BLOCK(mi_row + hbs_h, mi_col, bsize2, 1);
+      DEC_BLOCK(mi_row + hbs_h, mi_col + hbs_w, bsize2, 2);
       break;
     case PARTITION_VERT_A:
       DEC_BLOCK(mi_row, mi_col, bsize2, 0);
-      DEC_BLOCK(mi_row + hbs, mi_col, bsize2, 1);
-      DEC_BLOCK(mi_row, mi_col + hbs, subsize, 2);
+      DEC_BLOCK(mi_row + hbs_h, mi_col, bsize2, 1);
+      DEC_BLOCK(mi_row, mi_col + hbs_w, subsize, 2);
       break;
     case PARTITION_VERT_B:
       DEC_BLOCK(mi_row, mi_col, subsize, 0);
-      DEC_BLOCK(mi_row, mi_col + hbs, bsize2, 1);
-      DEC_BLOCK(mi_row + hbs, mi_col + hbs, bsize2, 2);
+      DEC_BLOCK(mi_row, mi_col + hbs_w, bsize2, 1);
+      DEC_BLOCK(mi_row + hbs_h, mi_col + hbs_w, bsize2, 2);
       break;
     case PARTITION_HORZ_4:
       for (int i = 0; i < 4; ++i) {
-        int this_mi_row = mi_row + i * quarter_step;
+        int this_mi_row = mi_row + i * qbs_h;
         if (i > 0 && this_mi_row >= cm->mi_params.mi_rows) break;
         DEC_BLOCK(this_mi_row, mi_col, subsize, i);
       }
       break;
     case PARTITION_VERT_4:
       for (int i = 0; i < 4; ++i) {
-        int this_mi_col = mi_col + i * quarter_step;
+        int this_mi_col = mi_col + i * qbs_w;
         if (i > 0 && this_mi_col >= cm->mi_params.mi_cols) break;
         DEC_BLOCK(mi_row, this_mi_col, subsize, i);
       }
       break;
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
     default: assert(0 && "Invalid partition type");
   }
 

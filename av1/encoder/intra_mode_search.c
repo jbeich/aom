@@ -324,19 +324,17 @@ static int cfl_rd_pick_alpha(MACROBLOCK *const x, const AV1_COMP *const cpi,
   MB_MODE_INFO *const mbmi = xd->mi[0];
   const MACROBLOCKD_PLANE *pd = &xd->plane[AOM_PLANE_U];
   const ModeCosts *mode_costs = &x->mode_costs;
-#if CONFIG_SDP
+#if CONFIG_EXT_RECUR_PARTITIONS
+  const BLOCK_SIZE plane_bsize = get_plane_block_size(
+      mbmi->chroma_ref_info.bsize_base, pd->subsampling_x, pd->subsampling_y);
+#elif CONFIG_SDP
   assert(xd->tree_type != LUMA_PART);
   const BLOCK_SIZE plane_bsize = get_plane_block_size(
       mbmi->sb_type[PLANE_TYPE_UV], pd->subsampling_x, pd->subsampling_y);
-#else
+#else   // !CONFIG_SDP && ! CONFIG_EXT_RECUR_PARTITIONS
   const BLOCK_SIZE plane_bsize =
-#if CONFIG_SDP
-      get_plane_block_size(mbmi->sb_type[xd->tree_type == CHROMA_PART],
-                           pd->subsampling_x, pd->subsampling_y);
-#else
       get_plane_block_size(mbmi->sb_type, pd->subsampling_x, pd->subsampling_y);
-#endif
-#endif
+#endif  // CONFIG_SDP
 
   assert(is_cfl_allowed(xd) && cpi->oxcf.intra_mode_cfg.enable_cfl_intra);
   assert(plane_bsize < BLOCK_SIZES_ALL);
@@ -481,16 +479,14 @@ int64_t av1_rd_pick_intra_sbuv_mode(const AV1_COMP *const cpi, MACROBLOCK *x,
   if (xd->tree_type == SHARED_PART) {
 #endif
     if (xd->cfl.store_y) {
-      // Restore reconstructed luma values.
-      // TODO(chiyotsai@google.com): right now we are re-computing the txfm in
-      // this function everytime we search through uv modes. There is some
-      // potential speed up here if we cache the result to avoid redundant
-      // computation.
-#if CONFIG_SDP
-      av1_encode_intra_block_plane(cpi, x, mbmi->sb_type[PLANE_TYPE_Y],
-                                   AOM_PLANE_Y, DRY_RUN_NORMAL,
+#if CONFIG_EXT_RECUR_PARTITIONS
+      av1_encode_intra_block_plane(cpi, x, AOM_PLANE_Y, DRY_RUN_NORMAL,
                                    cpi->optimize_seg_arr[mbmi->segment_id]);
-#else
+#elif CONFIG_SDP
+    av1_encode_intra_block_plane(cpi, x, mbmi->sb_type[PLANE_TYPE_Y],
+                                 AOM_PLANE_Y, DRY_RUN_NORMAL,
+                                 cpi->optimize_seg_arr[mbmi->segment_id]);
+#else  // !CONFIG_EXT_RECUR_PARTITIONS && !CONFIG_SDP
     av1_encode_intra_block_plane(cpi, x, mbmi->sb_type, AOM_PLANE_Y,
                                  DRY_RUN_NORMAL,
                                  cpi->optimize_seg_arr[mbmi->segment_id]);

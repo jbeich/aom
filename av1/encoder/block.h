@@ -229,8 +229,8 @@ typedef struct {
 #if CONFIG_SDP
   int cb_offset[MAX_MB_PLANE];
 #else
-  int cb_offset;
-#endif
+  uint16_t cb_offset[MAX_MB_PLANE];
+#endif  // CONFIG_SDP
 } MB_MODE_INFO_EXT_FRAME;
 
 /*! \brief Txfm search results for a partition
@@ -582,7 +582,11 @@ typedef struct {
                     [EXT_PARTITION_TYPES];
 #else
   int partition_cost[PARTITION_CONTEXTS][EXT_PARTITION_TYPES];
-#endif
+#endif  // CONFIG_SDP
+#if CONFIG_EXT_RECUR_PARTITIONS
+  /*! Cost for coding the partition for rectangular blocks. */
+  int partition_rec_cost[PARTITION_CONTEXTS_REC][PARTITION_TYPES_REC];
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
   /**@}*/
 
   /*****************************************************************************
@@ -873,7 +877,7 @@ typedef struct macroblock {
 #if CONFIG_SDP
   int cb_offset[MAX_MB_PLANE];
 #else
-  uint16_t cb_offset;
+  uint16_t cb_offset[MAX_MB_PLANE];
 #endif
 
   //! Modified source and masks used for fast OBMC search.

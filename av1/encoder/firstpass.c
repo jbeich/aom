@@ -364,7 +364,11 @@ static int firstpass_intra_prediction(
   xd->mi[0]->tx_size =
       use_dc_pred ? (bsize >= fp_block_size ? TX_16X16 : TX_8X8) : TX_4X4;
 
+#if CONFIG_EXT_RECUR_PARTITIONS
+  av1_encode_intra_block_plane(cpi, x, 0, DRY_RUN_NORMAL, 0);
+#else
   av1_encode_intra_block_plane(cpi, x, bsize, 0, DRY_RUN_NORMAL, 0);
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
   int this_intra_error = aom_get_mb_ss(x->plane[0].src_diff);
   if (seq_params->use_highbitdepth) {
     switch (seq_params->bit_depth) {

@@ -433,6 +433,9 @@ const arg_def_t *av1_key_val_args[] = {
 #if CONFIG_SDP
   &g_av1_codec_arg_defs.enable_sdp,
 #endif
+#if CONFIG_EXT_RECUR_PARTITIONS
+  &g_av1_codec_arg_defs.disable_ml_partition_speed_features,
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
   NULL,
 };
 
@@ -566,6 +569,9 @@ static void init_config(cfg_options_t *config) {
 #if CONFIG_SDP
   config->enable_sdp = 1;
 #endif
+#if CONFIG_EXT_RECUR_PARTITIONS
+  config->disable_ml_partition_speed_features = 1;
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
   config->enable_flip_idtx = 1;
   config->enable_deblocking = 1;
   config->enable_cdef = 1;
@@ -1359,6 +1365,10 @@ static void show_stream_config(struct stream_state *stream,
   fprintf(stdout, "                               : SDP (%d)\n",
           encoder_cfg->enable_sdp);
 #endif
+#if CONFIG_EXT_RECUR_PARTITIONS
+  fprintf(stdout, "Disable ML Tools for Partition : (%d)\n",
+          encoder_cfg->disable_ml_partition_speed_features);
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
 
   fprintf(stdout,
           "Tool setting (Intra)           : SmoothIntra (%d), CfL (%d), "

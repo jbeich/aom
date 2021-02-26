@@ -426,10 +426,17 @@ static AOM_INLINE void get_inter_predictors_masked_compound(
   const int bw = block_size_wide[bsize];
   const int bh = block_size_high[bsize];
   // get inter predictors to use for masked compound modes
+#if CONFIG_EXT_RECUR_PARTITIONS
+  av1_build_inter_predictors_for_planes_single_buf(xd, 0, 0, 0, preds0,
+                                                   strides);
+  av1_build_inter_predictors_for_planes_single_buf(xd, 0, 0, 1, preds1,
+                                                   strides);
+#else
   av1_build_inter_predictors_for_planes_single_buf(xd, bsize, 0, 0, 0, preds0,
                                                    strides);
   av1_build_inter_predictors_for_planes_single_buf(xd, bsize, 0, 0, 1, preds1,
                                                    strides);
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
   const struct buf_2d *const src = &x->plane[0].src;
 
   if (is_cur_buf_hbd(xd)) {
@@ -457,8 +464,12 @@ static INLINE void compute_best_interintra_mode(
   const int bw = block_size_wide[bsize];
   mbmi->interintra_mode = interintra_mode;
   int rmode = interintra_mode_cost[interintra_mode];
+#if CONFIG_EXT_RECUR_PARTITIONS
+  av1_build_intra_predictors_for_interintra(cm, xd, 0, orig_dst, intrapred, bw);
+#else
   av1_build_intra_predictors_for_interintra(cm, xd, bsize, 0, orig_dst,
                                             intrapred, bw);
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
   av1_combine_interintra(xd, bsize, 0, tmp_buf, bw, intrapred, bw);
   model_rd_sb_fn[MODELRD_TYPE_INTERINTRA](cpi, bsize, x, xd, 0, 0, &rate, &dist,
                                           &skip_txfm_sb, &skip_sse_sb, NULL,
@@ -520,8 +531,13 @@ static AOM_INLINE int64_t compute_best_wedge_interintra(
   uint8_t *intrapred = get_buf_by_bd(xd, intrapred_);
   for (INTERINTRA_MODE mode = 0; mode < INTERINTRA_MODES; ++mode) {
     mbmi->interintra_mode = mode;
+#if CONFIG_EXT_RECUR_PARTITIONS
+    av1_build_intra_predictors_for_interintra(cm, xd, 0, orig_dst, intrapred,
+                                              bw);
+#else
     av1_build_intra_predictors_for_interintra(cm, xd, bsize, 0, orig_dst,
                                               intrapred, bw);
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
     int64_t rd = pick_interintra_wedge(cpi, x, bsize, intrapred_, tmp_buf_);
     const int rate_overhead =
         interintra_mode_cost[mode] +
@@ -575,8 +591,13 @@ static int handle_smooth_inter_intra_mode(
                                *best_interintra_mode != INTERINTRA_MODES;
   if (interintra_mode_reuse || *best_interintra_mode != INTERINTRA_MODES - 1) {
     mbmi->interintra_mode = *best_interintra_mode;
+#if CONFIG_EXT_RECUR_PARTITIONS
+    av1_build_intra_predictors_for_interintra(cm, xd, 0, orig_dst, intrapred,
+                                              bw);
+#else
     av1_build_intra_predictors_for_interintra(cm, xd, bsize, 0, orig_dst,
                                               intrapred, bw);
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
     av1_combine_interintra(xd, bsize, 0, tmp_buf, bw, intrapred, bw);
   }
 
@@ -634,15 +655,25 @@ static int handle_wedge_inter_intra_mode(
     mbmi->interintra_mode = best_mode;
     mbmi->interintra_wedge_index = best_wedge_index;
     if (best_mode != INTERINTRA_MODES - 1) {
+#if CONFIG_EXT_RECUR_PARTITIONS
+      av1_build_intra_predictors_for_interintra(cm, xd, 0, orig_dst, intrapred,
+                                                bw);
+#else
       av1_build_intra_predictors_for_interintra(cm, xd, bsize, 0, orig_dst,
                                                 intrapred, bw);
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
     }
   } else if (!try_smooth_interintra) {
     if (*best_interintra_mode == INTERINTRA_MODES) {
       mbmi->interintra_mode = INTERINTRA_MODES - 1;
       *best_interintra_mode = INTERINTRA_MODES - 1;
+#if CONFIG_EXT_RECUR_PARTITIONS
+      av1_build_intra_predictors_for_interintra(cm, xd, 0, orig_dst, intrapred,
+                                                bw);
+#else
       av1_build_intra_predictors_for_interintra(cm, xd, bsize, 0, orig_dst,
                                                 intrapred, bw);
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
       // Pick wedge mask based on INTERINTRA_MODES - 1
       *best_rd = pick_interintra_wedge(cpi, x, bsize, intrapred_, tmp_buf_);
       // Find the best interintra mode for the chosen wedge mask
@@ -657,14 +688,24 @@ static int handle_wedge_inter_intra_mode(
 
       // Recompute prediction if required
       if (*best_interintra_mode != INTERINTRA_MODES - 1) {
+#if CONFIG_EXT_RECUR_PARTITIONS
+        av1_build_intra_predictors_for_interintra(cm, xd, 0, orig_dst,
+                                                  intrapred, bw);
+#else
         av1_build_intra_predictors_for_interintra(cm, xd, bsize, 0, orig_dst,
                                                   intrapred, bw);
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
       }
     } else {
       // Pick wedge mask for the best interintra mode (reused)
       mbmi->interintra_mode = *best_interintra_mode;
+#if CONFIG_EXT_RECUR_PARTITIONS
+      av1_build_intra_predictors_for_interintra(cm, xd, 0, orig_dst, intrapred,
+                                                bw);
+#else
       av1_build_intra_predictors_for_interintra(cm, xd, bsize, 0, orig_dst,
                                                 intrapred, bw);
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
       *best_rd = pick_interintra_wedge(cpi, x, bsize, intrapred_, tmp_buf_);
     }
   } else {
@@ -1204,18 +1245,33 @@ static int64_t masked_compound_type_rd(
         mbmi->mv[0].as_int = cur_mv[0].as_int;
         mbmi->mv[1].as_int = cur_mv[1].as_int;
         *out_rate_mv = rate_mv;
+#if CONFIG_EXT_RECUR_PARTITIONS
+        av1_build_wedge_inter_predictor_from_buf(xd, 0, 0, preds0, strides,
+                                                 preds1, strides);
+#else
         av1_build_wedge_inter_predictor_from_buf(xd, bsize, 0, 0, preds0,
                                                  strides, preds1, strides);
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
       } else {
         // build the final prediciton using the updated mv
+#if CONFIG_EXT_RECUR_PARTITIONS
+        av1_build_wedge_inter_predictor_from_buf(xd, 0, 0, tmp_preds0, strides,
+                                                 tmp_preds1, strides);
+#else
         av1_build_wedge_inter_predictor_from_buf(xd, bsize, 0, 0, tmp_preds0,
                                                  strides, tmp_preds1, strides);
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
       }
       release_compound_type_rd_buffers(&tmp_buf);
     } else {
       *out_rate_mv = rate_mv;
+#if CONFIG_EXT_RECUR_PARTITIONS
+      av1_build_wedge_inter_predictor_from_buf(xd, 0, 0, preds0, strides,
+                                               preds1, strides);
+#else
       av1_build_wedge_inter_predictor_from_buf(xd, bsize, 0, 0, preds0, strides,
                                                preds1, strides);
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
     }
     // Get the RD cost from model RD
     model_rd_sb_fn[MODELRD_TYPE_MASKED_COMPOUND](
@@ -1229,8 +1285,13 @@ static int64_t masked_compound_type_rd(
         mbmi->mv[0].as_int = cur_mv[0].as_int;
         mbmi->mv[1].as_int = cur_mv[1].as_int;
         *out_rate_mv = rate_mv;
+#if CONFIG_EXT_RECUR_PARTITIONS
+        av1_build_wedge_inter_predictor_from_buf(xd, 0, 0, preds0, strides,
+                                                 preds1, strides);
+#else
         av1_build_wedge_inter_predictor_from_buf(xd, bsize, 0, 0, preds0,
                                                  strides, preds1, strides);
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
         *comp_model_rd_cur = best_rd_cur;
       }
     }

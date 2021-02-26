@@ -335,11 +335,14 @@ static TX_SIZE set_lpf_parameters(
 #else
               mi_prev->skip_txfm && is_inter_block(mi_prev);
 #endif
-#if CONFIG_SDP
+#if CONFIG_EXT_RECUR_PARTITIONS
+          const BLOCK_SIZE bsize = get_mb_plane_block_size(
+              mbmi, plane, plane_ptr->subsampling_x, plane_ptr->subsampling_y);
+#elif CONFIG_SDP
           const BLOCK_SIZE bsize = get_plane_block_size(
               mbmi->sb_type[plane > 0], plane_ptr->subsampling_x,
               plane_ptr->subsampling_y);
-#else
+#else  // !CONFIG_EXT_RECUR_PARTITIONS && ! CONFIG_SDP
           const BLOCK_SIZE bsize =
               get_plane_block_size(mbmi->sb_type, plane_ptr->subsampling_x,
                                    plane_ptr->subsampling_y);

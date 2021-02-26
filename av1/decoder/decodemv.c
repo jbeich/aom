@@ -1625,12 +1625,14 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
 
   mbmi->motion_mode = SIMPLE_TRANSLATION;
 #if CONFIG_SDP
-  if (is_motion_variation_allowed_bsize(mbmi->sb_type[PLANE_TYPE_Y]) &&
+  if (is_motion_variation_allowed_bsize(mbmi->sb_type[PLANE_TYPE_Y], xd->mi_row,
+                                        xd->mi_col) &&
       !mbmi->skip_mode && !has_second_ref(mbmi)) {
 #else
-  if (is_motion_variation_allowed_bsize(mbmi->sb_type) && !mbmi->skip_mode &&
-      !has_second_ref(mbmi)) {
-#endif
+  if (is_motion_variation_allowed_bsize(mbmi->sb_type, xd->mi_row,
+                                        xd->mi_col) &&
+      !mbmi->skip_mode && !has_second_ref(mbmi)) {
+#endif  // CONFIG_SDP
     mbmi->num_proj_ref = av1_findSamples(cm, xd, pts, pts_inref);
   }
   av1_count_overlappable_neighbors(cm, xd);

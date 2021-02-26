@@ -240,6 +240,12 @@ typedef struct cfg_options {
    */
   unsigned int enable_sdp;
 #endif  // CONFIG_SDP
+#if CONFIG_EXT_RECUR_PARTITIONS
+  /*!\brief disable ml-based speed-up for partition search
+   *
+   */
+  unsigned int disable_ml_partition_speed_features;
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
   /*!\brief enable flip and identity transform type
    *
    */

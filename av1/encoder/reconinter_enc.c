@@ -43,32 +43,54 @@ static void enc_calc_subpel_params(const MV *const src_mv,
   (void)mc_buf;
 
   const struct scale_factors *sf = inter_pred_params->scale_factors;
-
   struct buf_2d *pre_buf = &inter_pred_params->ref_frame_buf;
-  int ssx = inter_pred_params->subsampling_x;
-  int ssy = inter_pred_params->subsampling_y;
-  int orig_pos_y = inter_pred_params->pix_row << SUBPEL_BITS;
-  orig_pos_y += src_mv->row * (1 << (1 - ssy));
-  int orig_pos_x = inter_pred_params->pix_col << SUBPEL_BITS;
-  orig_pos_x += src_mv->col * (1 << (1 - ssx));
-  int pos_y = sf->scale_value_y(orig_pos_y, sf);
-  int pos_x = sf->scale_value_x(orig_pos_x, sf);
-  pos_x += SCALE_EXTRA_OFF;
-  pos_y += SCALE_EXTRA_OFF;
+#if CONFIG_EXT_RECUR_PARTITIONS
+  const int is_scaled = av1_is_scaled(sf);
+  if (is_scaled || !xd) {
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
+    int ssx = inter_pred_params->subsampling_x;
+    int ssy = inter_pred_params->subsampling_y;
+    int orig_pos_y = inter_pred_params->pix_row << SUBPEL_BITS;
+    orig_pos_y += src_mv->row * (1 << (1 - ssy));
+    int orig_pos_x = inter_pred_params->pix_col << SUBPEL_BITS;
+    orig_pos_x += src_mv->col * (1 << (1 - ssx));
+    int pos_y = sf->scale_value_y(orig_pos_y, sf);
+    int pos_x = sf->scale_value_x(orig_pos_x, sf);
+    pos_x += SCALE_EXTRA_OFF;
+    pos_y += SCALE_EXTRA_OFF;
 
-  const int top = -AOM_LEFT_TOP_MARGIN_SCALED(ssy);
-  const int left = -AOM_LEFT_TOP_MARGIN_SCALED(ssx);
-  const int bottom = (pre_buf->height + AOM_INTERP_EXTEND) << SCALE_SUBPEL_BITS;
-  const int right = (pre_buf->width + AOM_INTERP_EXTEND) << SCALE_SUBPEL_BITS;
-  pos_y = clamp(pos_y, top, bottom);
-  pos_x = clamp(pos_x, left, right);
+    const int top = -AOM_LEFT_TOP_MARGIN_SCALED(ssy);
+    const int left = -AOM_LEFT_TOP_MARGIN_SCALED(ssx);
+    const int bottom = (pre_buf->height + AOM_INTERP_EXTEND)
+                       << SCALE_SUBPEL_BITS;
+    const int right = (pre_buf->width + AOM_INTERP_EXTEND) << SCALE_SUBPEL_BITS;
+    pos_y = clamp(pos_y, top, bottom);
+    pos_x = clamp(pos_x, left, right);
 
-  subpel_params->subpel_x = pos_x & SCALE_SUBPEL_MASK;
-  subpel_params->subpel_y = pos_y & SCALE_SUBPEL_MASK;
-  subpel_params->xs = sf->x_step_q4;
-  subpel_params->ys = sf->y_step_q4;
-  *pre = pre_buf->buf0 + (pos_y >> SCALE_SUBPEL_BITS) * pre_buf->stride +
-         (pos_x >> SCALE_SUBPEL_BITS);
+    subpel_params->subpel_x = pos_x & SCALE_SUBPEL_MASK;
+    subpel_params->subpel_y = pos_y & SCALE_SUBPEL_MASK;
+    subpel_params->xs = sf->x_step_q4;
+    subpel_params->ys = sf->y_step_q4;
+    *pre = pre_buf->buf0 + (pos_y >> SCALE_SUBPEL_BITS) * pre_buf->stride +
+           (pos_x >> SCALE_SUBPEL_BITS);
+#if CONFIG_EXT_RECUR_PARTITIONS
+  } else {
+    int pos_x = inter_pred_params->pix_col << SUBPEL_BITS;
+    int pos_y = inter_pred_params->pix_row << SUBPEL_BITS;
+    const int bw = inter_pred_params->block_width;
+    const int bh = inter_pred_params->block_height;
+    const MV mv_q4 = clamp_mv_to_umv_border_sb(
+        xd, src_mv, bw, bh, inter_pred_params->subsampling_x,
+        inter_pred_params->subsampling_y);
+    subpel_params->xs = subpel_params->ys = SCALE_SUBPEL_SHIFTS;
+    subpel_params->subpel_x = (mv_q4.col & SUBPEL_MASK) << SCALE_EXTRA_BITS;
+    subpel_params->subpel_y = (mv_q4.row & SUBPEL_MASK) << SCALE_EXTRA_BITS;
+    pos_x += mv_q4.col;
+    pos_y += mv_q4.row;
+    *pre = pre_buf->buf0 + (pos_y >> SUBPEL_BITS) * pre_buf->stride +
+           (pos_x >> SUBPEL_BITS);
+  }
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
   *src_stride = pre_buf->stride;
 }
 
@@ -291,10 +313,17 @@ void av1_build_obmc_inter_predictors_sb(const AV1_COMMON *cm, MACROBLOCKD *xd) {
                                   dst_stride2);
 }
 
+#if CONFIG_EXT_RECUR_PARTITIONS
+void av1_build_inter_predictors_for_planes_single_buf(MACROBLOCKD *xd,
+                                                      int plane_from,
+                                                      int plane_to, int ref,
+                                                      uint8_t *ext_dst[3],
+                                                      int ext_dst_stride[3]) {
+#else
 void av1_build_inter_predictors_for_planes_single_buf(
     MACROBLOCKD *xd, BLOCK_SIZE bsize, int plane_from, int plane_to, int ref,
     uint8_t *ext_dst[3], int ext_dst_stride[3]) {
-  assert(bsize < BLOCK_SIZES_ALL);
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
   const MB_MODE_INFO *mi = xd->mi[0];
   const int mi_row = xd->mi_row;
   const int mi_col = xd->mi_col;
@@ -307,8 +336,14 @@ void av1_build_inter_predictors_for_planes_single_buf(
 
   for (int plane = plane_from; plane <= plane_to; ++plane) {
     const struct macroblockd_plane *pd = &xd->plane[plane];
+#if CONFIG_EXT_RECUR_PARTITIONS
+    assert(mi->sb_type < BLOCK_SIZES_ALL);
+    const BLOCK_SIZE plane_bsize = get_mb_plane_block_size(
+        mi, plane, pd->subsampling_x, pd->subsampling_y);
+#else
     const BLOCK_SIZE plane_bsize =
         get_plane_block_size(bsize, pd->subsampling_x, pd->subsampling_y);
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
     const int bw = block_size_wide[plane_bsize];
     const int bh = block_size_high[plane_bsize];
 
@@ -425,17 +460,28 @@ static void build_wedge_inter_predictor_from_buf(
   }
 }
 
+#if CONFIG_EXT_RECUR_PARTITIONS
+void av1_build_wedge_inter_predictor_from_buf(
+    MACROBLOCKD *xd, int plane_from, int plane_to, uint8_t *ext_dst0[3],
+    int ext_dst_stride0[3], uint8_t *ext_dst1[3], int ext_dst_stride1[3]) {
+#else
 void av1_build_wedge_inter_predictor_from_buf(MACROBLOCKD *xd, BLOCK_SIZE bsize,
                                               int plane_from, int plane_to,
                                               uint8_t *ext_dst0[3],
                                               int ext_dst_stride0[3],
                                               uint8_t *ext_dst1[3],
                                               int ext_dst_stride1[3]) {
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
   int plane;
-  assert(bsize < BLOCK_SIZES_ALL);
   for (plane = plane_from; plane <= plane_to; ++plane) {
+#if CONFIG_EXT_RECUR_PARTITIONS
+    const BLOCK_SIZE plane_bsize = get_mb_plane_block_size(
+        xd->mi[0], plane, xd->plane[plane].subsampling_x,
+        xd->plane[plane].subsampling_y);
+#else
     const BLOCK_SIZE plane_bsize = get_plane_block_size(
         bsize, xd->plane[plane].subsampling_x, xd->plane[plane].subsampling_y);
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
     const int bw = block_size_wide[plane_bsize];
     const int bh = block_size_high[plane_bsize];
     build_wedge_inter_predictor_from_buf(

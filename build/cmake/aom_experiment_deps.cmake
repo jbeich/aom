@@ -25,4 +25,8 @@ macro(fix_experiment_configs)
     change_config_and_warn(CONFIG_DIST_8X8 0 CONFIG_MULTITHREAD)
   endif()
 
+  if(CONFIG_EXT_RECUR_PARTITIONS)
+    change_config_and_warn(CONFIG_SDP 0 CONFIG_EXT_RECUR_PARTITIONS)
+  endif()
+
 endmacro()

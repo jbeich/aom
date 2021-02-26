@@ -92,11 +92,11 @@ static int has_top_right(const AV1_COMMON *cm, const MACROBLOCKD *xd,
     const int sb_mi_size = mi_size_wide[cm->seq_params.sb_size];
     const int mi_row_aligned =
         is_bsize_altered_for_chroma
-            ? mi_row - (mi_row & (mi_size_high[bsize] - 1))
+            ? xd->mi[0]->chroma_ref_info.mi_row_chroma_base
             : mi_row;
     const int mi_col_aligned =
         is_bsize_altered_for_chroma
-            ? mi_col - (mi_col & (mi_size_wide[bsize] - 1))
+            ? xd->mi[0]->chroma_ref_info.mi_col_chroma_base
             : mi_col;
     const int tr_mask_row = (mi_row_aligned & (sb_mi_size - 1)) - 1;
     const int tr_mask_col =
@@ -191,11 +191,11 @@ static int has_bottom_left(const AV1_COMMON *cm, const MACROBLOCKD *xd,
     const int sb_mi_size = mi_size_high[cm->seq_params.sb_size];
     const int mi_row_aligned =
         is_bsize_altered_for_chroma
-            ? mi_row - (mi_row & (mi_size_high[bsize] - 1))
+            ? xd->mi[0]->chroma_ref_info.mi_row_chroma_base
             : mi_row;
     const int mi_col_aligned =
         is_bsize_altered_for_chroma
-            ? mi_col - (mi_col & (mi_size_wide[bsize] - 1))
+            ? xd->mi[0]->chroma_ref_info.mi_col_chroma_base
             : mi_col;
     const int bl_mask_row =
         (mi_row_aligned & (sb_mi_size - 1)) + mi_size_high[bsize];
@@ -1417,8 +1417,8 @@ void av1_predict_intra_block_facade(const AV1_COMMON *cm, MACROBLOCKD *xd,
         mbmi->sb_type[xd->tree_type == CHROMA_PART], pd->subsampling_x,
         pd->subsampling_y);
 #else
-        mbmi->sb_type, pd->subsampling_x, pd->subsampling_y);
-#endif
+        mbmi->chroma_ref_info.bsize_base, pd->subsampling_x, pd->subsampling_y);
+#endif  // CONFIG_SDP
     (void)plane_bsize;
     assert(plane_bsize < BLOCK_SIZES_ALL);
     if (!xd->lossless[mbmi->segment_id]) {
