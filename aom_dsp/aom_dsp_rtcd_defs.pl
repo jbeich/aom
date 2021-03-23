@@ -107,12 +107,11 @@ specialize qw/aom_dc_left_predictor_8x4 sse2/;
 specialize qw/aom_dc_left_predictor_8x8 neon msa sse2/;
 specialize qw/aom_dc_left_predictor_8x16 sse2/;
 specialize qw/aom_dc_left_predictor_8x32 sse2/;
-if (aom_config("CONFIG_EXT_RECUR_PARTITIONS") eq "") {
-  specialize qw/aom_dc_left_predictor_16x4 sse2/;
-  specialize qw/aom_dc_left_predictor_16x8 sse2/;
-  specialize qw/aom_dc_left_predictor_16x16 neon msa sse2/;
-  specialize qw/aom_dc_left_predictor_16x32 sse2/;
-} # CONFIG_EXT_RECUR_PARTITIONS
+
+specialize qw/aom_dc_left_predictor_16x4 sse2/;
+specialize qw/aom_dc_left_predictor_16x8 sse2/;
+specialize qw/aom_dc_left_predictor_16x16 neon msa sse2/;
+specialize qw/aom_dc_left_predictor_16x32 sse2/;
 specialize qw/aom_dc_left_predictor_16x64 sse2/;
 specialize qw/aom_dc_left_predictor_32x8 sse2/;
 specialize qw/aom_dc_left_predictor_32x16 sse2 avx2/;
@@ -147,12 +146,10 @@ specialize qw/aom_v_predictor_8x4 sse2/;
 specialize qw/aom_v_predictor_8x8 neon msa sse2/;
 specialize qw/aom_v_predictor_8x16 sse2/;
 specialize qw/aom_v_predictor_8x32 sse2/;
-if (aom_config("CONFIG_EXT_RECUR_PARTITIONS") eq "") {
-  specialize qw/aom_v_predictor_16x4 sse2/;
-  specialize qw/aom_v_predictor_16x8 sse2/;
-  specialize qw/aom_v_predictor_16x16 neon msa sse2/;
-  specialize qw/aom_v_predictor_16x32 sse2/;
-} # CONFIG_EXT_RECUR_PARTITIONS
+specialize qw/aom_v_predictor_16x4 sse2/;
+specialize qw/aom_v_predictor_16x8 sse2/;
+specialize qw/aom_v_predictor_16x16 neon msa sse2/;
+specialize qw/aom_v_predictor_16x32 sse2/;
 specialize qw/aom_v_predictor_16x64 sse2/;
 specialize qw/aom_v_predictor_32x8 sse2/;
 specialize qw/aom_v_predictor_32x16 sse2 avx2/;
@@ -168,12 +165,10 @@ specialize qw/aom_h_predictor_8x4 sse2/;
 specialize qw/aom_h_predictor_8x8 neon dspr2 msa sse2/;
 specialize qw/aom_h_predictor_8x16 sse2/;
 specialize qw/aom_h_predictor_8x32 sse2/;
-if (aom_config("CONFIG_EXT_RECUR_PARTITIONS") eq "") {
-  specialize qw/aom_h_predictor_16x4 sse2/;
-  specialize qw/aom_h_predictor_16x8 sse2/;
-  specialize qw/aom_h_predictor_16x16 neon dspr2 msa sse2/;
-  specialize qw/aom_h_predictor_16x32 sse2/;
-} # CONFIG_EXT_RECUR_PARTITIONS
+specialize qw/aom_h_predictor_16x4 sse2/;
+specialize qw/aom_h_predictor_16x8 sse2/;
+specialize qw/aom_h_predictor_16x16 neon dspr2 msa sse2/;
+specialize qw/aom_h_predictor_16x32 sse2/;
 specialize qw/aom_h_predictor_16x64 sse2/;
 specialize qw/aom_h_predictor_32x8 sse2/;
 specialize qw/aom_h_predictor_32x16 sse2/;
@@ -189,12 +184,10 @@ specialize qw/aom_paeth_predictor_8x4 ssse3/;
 specialize qw/aom_paeth_predictor_8x8 ssse3/;
 specialize qw/aom_paeth_predictor_8x16 ssse3/;
 specialize qw/aom_paeth_predictor_8x32 ssse3/;
-if (aom_config("CONFIG_EXT_RECUR_PARTITIONS") eq "") {
-  specialize qw/aom_paeth_predictor_16x4 ssse3/;
-  specialize qw/aom_paeth_predictor_16x8 ssse3 avx2/;
-  specialize qw/aom_paeth_predictor_16x16 ssse3 avx2/;
-  specialize qw/aom_paeth_predictor_16x32 ssse3 avx2/;
-} # !CONFIG_EXT_RECUR_PARTITIONS
+specialize qw/aom_paeth_predictor_16x4 ssse3/;
+specialize qw/aom_paeth_predictor_16x8 ssse3 avx2/;
+specialize qw/aom_paeth_predictor_16x16 ssse3 avx2/;
+specialize qw/aom_paeth_predictor_16x32 ssse3 avx2/;
 specialize qw/aom_paeth_predictor_16x64 ssse3 avx2/;
 specialize qw/aom_paeth_predictor_32x8 ssse3/;
 specialize qw/aom_paeth_predictor_32x16 ssse3 avx2/;
@@ -274,12 +267,10 @@ specialize qw/aom_dc_predictor_8x4 sse2/;
 specialize qw/aom_dc_predictor_8x8 dspr2 neon msa sse2/;
 specialize qw/aom_dc_predictor_8x16 sse2/;
 specialize qw/aom_dc_predictor_8x32 sse2/;
-if (aom_config("CONFIG_EXT_RECUR_PARTITIONS") eq "") {
-  specialize qw/aom_dc_predictor_16x4 sse2/;
-  specialize qw/aom_dc_predictor_16x8 sse2/;
-  specialize qw/aom_dc_predictor_16x16 dspr2 neon msa sse2/;
-  specialize qw/aom_dc_predictor_16x32 sse2/;
-} # CONFIG_EXT_RECUR_PARTITIONS
+specialize qw/aom_dc_predictor_16x4 sse2/;
+specialize qw/aom_dc_predictor_16x8 sse2/;
+specialize qw/aom_dc_predictor_16x16 dspr2 neon msa sse2/;
+specialize qw/aom_dc_predictor_16x32 sse2/;
 specialize qw/aom_dc_predictor_16x64 sse2/;
 specialize qw/aom_dc_predictor_32x8 sse2/;
 specialize qw/aom_dc_predictor_32x16 sse2 avx2/;
@@ -290,11 +281,9 @@ specialize qw/aom_dc_predictor_64x32 sse2 avx2/;
 specialize qw/aom_dc_predictor_64x16 sse2 avx2/;
 specialize qw/aom_highbd_v_predictor_4x4 sse2/;
 specialize qw/aom_highbd_v_predictor_4x8 sse2/;
-if (aom_config("CONFIG_EXT_RECUR_PARTITIONS") eq "") {
-  specialize qw/aom_highbd_v_predictor_8x4 sse2/;
-  specialize qw/aom_highbd_v_predictor_8x8 sse2/;
-  specialize qw/aom_highbd_v_predictor_8x16 sse2/;
-} # CONFIG_EXT_RECUR_PARTITIONS
+specialize qw/aom_highbd_v_predictor_8x4 sse2/;
+specialize qw/aom_highbd_v_predictor_8x8 sse2/;
+specialize qw/aom_highbd_v_predictor_8x16 sse2/;
 specialize qw/aom_highbd_v_predictor_16x8 sse2/;
 specialize qw/aom_highbd_v_predictor_16x16 sse2/;
 specialize qw/aom_highbd_v_predictor_16x32 sse2/;
@@ -305,15 +294,11 @@ specialize qw/aom_highbd_v_predictor_32x32 sse2/;
 # by multiply and shift.
 specialize qw/aom_highbd_dc_predictor_4x4 sse2 neon/;
 specialize qw/aom_highbd_dc_predictor_4x8 sse2/;
-if (aom_config("CONFIG_EXT_RECUR_PARTITIONS") eq "") {
-  specialize qw/aom_highbd_dc_predictor_8x4 sse2/;;
-  specialize qw/aom_highbd_dc_predictor_8x8 sse2 neon/;;
-  specialize qw/aom_highbd_dc_predictor_8x16 sse2/;;
-} # CONFIG_EXT_RECUR_PARTITIONS
+specialize qw/aom_highbd_dc_predictor_8x4 sse2/;;
+specialize qw/aom_highbd_dc_predictor_8x8 sse2 neon/;;
+specialize qw/aom_highbd_dc_predictor_8x16 sse2/;;
 specialize qw/aom_highbd_dc_predictor_16x8 sse2/;
-if (aom_config("CONFIG_EXT_RECUR_PARTITIONS") eq "") {
-  specialize qw/aom_highbd_dc_predictor_16x16 sse2 neon/;
-} # CONFIG_EXT_RECUR_PARTITIONS
+specialize qw/aom_highbd_dc_predictor_16x16 sse2 neon/;
 specialize qw/aom_highbd_dc_predictor_16x32 sse2/;
 specialize qw/aom_highbd_dc_predictor_32x16 sse2/;
 specialize qw/aom_highbd_dc_predictor_32x32 sse2 neon/;
@@ -321,11 +306,9 @@ specialize qw/aom_highbd_dc_predictor_64x64 neon/;
 
 specialize qw/aom_highbd_h_predictor_4x4 sse2/;
 specialize qw/aom_highbd_h_predictor_4x8 sse2/;
-if (aom_config("CONFIG_EXT_RECUR_PARTITIONS") eq "") {
-  specialize qw/aom_highbd_h_predictor_8x4 sse2/;
-  specialize qw/aom_highbd_h_predictor_8x8 sse2/;
-  specialize qw/aom_highbd_h_predictor_8x16 sse2/;
-} # CONFIG_EXT_RECUR_PARTITIONS
+specialize qw/aom_highbd_h_predictor_8x4 sse2/;
+specialize qw/aom_highbd_h_predictor_8x8 sse2/;
+specialize qw/aom_highbd_h_predictor_8x16 sse2/;
 specialize qw/aom_highbd_h_predictor_16x8 sse2/;
 specialize qw/aom_highbd_h_predictor_16x16 sse2/;
 specialize qw/aom_highbd_h_predictor_16x32 sse2/;
@@ -339,11 +322,9 @@ specialize qw/aom_highbd_dc_top_predictor_4x8 sse2/;
 specialize qw/aom_highbd_dc_128_predictor_4x8 sse2/;
 specialize qw/aom_highbd_dc_top_predictor_8x4 sse2/;
 specialize qw/aom_highbd_dc_128_predictor_8x4 sse2/;
-if (aom_config("CONFIG_EXT_RECUR_PARTITIONS") eq "") {
-  specialize qw/aom_highbd_dc_left_predictor_8x4 sse2/;
-  specialize qw/aom_highbd_dc_left_predictor_8x8 sse2/;
-  specialize qw/aom_highbd_dc_left_predictor_8x16 sse2/;
-} # CONFIG_EXT_RECUR_PARTITIONS
+specialize qw/aom_highbd_dc_left_predictor_8x4 sse2/;
+specialize qw/aom_highbd_dc_left_predictor_8x8 sse2/;
+specialize qw/aom_highbd_dc_left_predictor_8x16 sse2/;
 specialize qw/aom_highbd_dc_top_predictor_8x8 sse2/;
 specialize qw/aom_highbd_dc_128_predictor_8x8 sse2/;
 specialize qw/aom_highbd_dc_top_predictor_8x16 sse2/;
@@ -371,9 +352,7 @@ add_proto qw/void aom_convolve_copy/,             "const uint8_t *src, ptrdiff_t
 add_proto qw/void aom_convolve8_horiz/,           "const uint8_t *src, ptrdiff_t src_stride, uint8_t *dst, ptrdiff_t dst_stride, const int16_t *filter_x, int x_step_q4, const int16_t *filter_y, int y_step_q4, int w, int h";
 add_proto qw/void aom_convolve8_vert/,            "const uint8_t *src, ptrdiff_t src_stride, uint8_t *dst, ptrdiff_t dst_stride, const int16_t *filter_x, int x_step_q4, const int16_t *filter_y, int y_step_q4, int w, int h";
 
-if (aom_config("CONFIG_EXT_RECUR_PARTITIONS") eq "") {
-  specialize qw/aom_convolve_copy       neon dspr2 msa sse2 avx2/;
-} # CONFIG_EXT_RECUR_PARTITIONS
+specialize qw/aom_convolve_copy       neon dspr2 msa sse2 avx2/;
 specialize qw/aom_convolve8_horiz     sse2 ssse3/, "$avx2_ssse3";
 specialize qw/aom_convolve8_vert      sse2 ssse3/, "$avx2_ssse3";
 
@@ -656,12 +635,10 @@ if (aom_config("CONFIG_AV1_ENCODER") eq "yes") {
   specialize qw/aom_sad32x64      avx2      msa sse2/;
   specialize qw/aom_sad32x32      avx2 neon msa sse2/;
   specialize qw/aom_sad32x16      avx2      msa sse2/;
-  if (aom_config("CONFIG_EXT_RECUR_PARTITIONS") eq "") {
-    specialize qw/aom_sad16x32              msa sse2/;
-    specialize qw/aom_sad16x16         neon msa sse2/;
-    specialize qw/aom_sad16x8          neon msa sse2/;
-    specialize qw/aom_sad16x4                     sse2/;
-  } # CONFIG_EXT_RECUR_PARTITIONS
+  specialize qw/aom_sad16x32                msa sse2/;
+  specialize qw/aom_sad16x16           neon msa sse2/;
+  specialize qw/aom_sad16x8            neon msa sse2/;
+  specialize qw/aom_sad16x4                     sse2/;
   specialize qw/aom_sad8x16            neon msa sse2/;
   specialize qw/aom_sad8x8             neon msa sse2/;
   specialize qw/aom_sad8x4                  msa sse2/;
@@ -706,6 +683,7 @@ if (aom_config("CONFIG_AV1_ENCODER") eq "yes") {
   specialize qw/aom_sad16x32_avg        msa sse2/;
   specialize qw/aom_sad16x16_avg        msa sse2/;
   specialize qw/aom_sad16x8_avg         msa sse2/;
+  specialize qw/aom_sad16x4_avg             sse2/;
   specialize qw/aom_sad8x16_avg         msa sse2/;
   specialize qw/aom_sad8x8_avg          msa sse2/;
   specialize qw/aom_sad8x4_avg          msa sse2/;
@@ -713,7 +691,6 @@ if (aom_config("CONFIG_AV1_ENCODER") eq "yes") {
   specialize qw/aom_sad4x4_avg          msa sse2/;
 
   specialize qw/aom_sad4x16_avg             sse2/;
-  specialize qw/aom_sad16x4_avg             sse2/;
   specialize qw/aom_sad8x32_avg             sse2/;
   specialize qw/aom_sad32x8_avg             sse2/;
   specialize qw/aom_sad16x64_avg            sse2/;
@@ -762,9 +739,7 @@ if (aom_config("CONFIG_AV1_ENCODER") eq "yes") {
     add_proto qw/unsigned int/, "aom_highbd_sad${w}x${h}", "const uint8_t *src_ptr, int src_stride, const uint8_t *ref_ptr, int ref_stride";
     add_proto qw/unsigned int/, "aom_highbd_sad_skip_${w}x${h}", "const uint8_t *src_ptr, int src_stride, const uint8_t *ref_ptr, int ref_stride";
     add_proto qw/unsigned int/, "aom_highbd_sad${w}x${h}_avg", "const uint8_t *src_ptr, int src_stride, const uint8_t *ref_ptr, int ref_stride, const uint8_t *second_pred";
-    if ($w != 128 && $h != 128 && $w != 4 &&
-     ((aom_config("CONFIG_EXT_RECUR_PARTITIONS") eq "") || (!($w == 16 && $h == 32)))) {
-     # 8x16 and 16x32 functions have an alignment issue with CONFIG_EXT_RECUR_PARTITIONS experiment. So disabled for now.
+    if ($w != 128 && $h != 128 && $w != 4) {
       specialize "aom_highbd_sad${w}x${h}", qw/sse2/;
       specialize "aom_highbd_sad${w}x${h}_avg", qw/sse2/;
     }
@@ -891,11 +866,9 @@ if (aom_config("CONFIG_AV1_ENCODER") eq "yes") {
   specialize qw/aom_sad32x16x4d   avx2      msa sse2/;
   specialize qw/aom_sad32x8x4d    avx2          sse2/;
   specialize qw/aom_sad16x64x4d                 sse2/;
-  if (aom_config("CONFIG_EXT_RECUR_PARTITIONS") eq "") {
-    specialize qw/aom_sad16x32x4d           msa sse2/;
-    specialize qw/aom_sad16x8x4d            msa sse2/;
-    specialize qw/aom_sad16x16x4d      neon msa sse2/;
-  } # CONFIG_EXT_RECUR_PARTITIONS
+  specialize qw/aom_sad16x32x4d           msa sse2/;
+  specialize qw/aom_sad16x8x4d            msa sse2/;
+  specialize qw/aom_sad16x16x4d      neon msa sse2/;
 
   specialize qw/aom_sad8x16x4d              msa sse2/;
   specialize qw/aom_sad8x8x4d               msa sse2/;
@@ -906,9 +879,7 @@ if (aom_config("CONFIG_AV1_ENCODER") eq "yes") {
 
   specialize qw/aom_sad4x32x4d  sse2/;
   specialize qw/aom_sad4x16x4d  sse2/;
-  if (aom_config("CONFIG_EXT_RECUR_PARTITIONS") eq "") {
-    specialize qw/aom_sad16x4x4d  sse2/;
-  } # CONFIG_EXT_RECUR_PARTITIONS
+  specialize qw/aom_sad16x4x4d  sse2/;
   specialize qw/aom_sad8x32x4d  sse2/;
   specialize qw/aom_sad32x8x4d  sse2/;
   specialize qw/aom_sad64x16x4d sse2/;
@@ -1241,9 +1212,7 @@ if (aom_config("CONFIG_AV1_ENCODER") eq "yes") {
   specialize qw/aom_variance32x64     sse2 avx2 neon msa/;
   specialize qw/aom_variance32x32     sse2 avx2 neon msa/;
   specialize qw/aom_variance32x16     sse2 avx2 neon msa/;
-  if (aom_config("CONFIG_EXT_RECUR_PARTITIONS") eq "") {
-    specialize qw/aom_variance16x32   sse2 avx2 neon msa/;
-  } # CONFIG_EXT_RECUR_PARTITIONS
+  specialize qw/aom_variance16x32     sse2 avx2 neon msa/;
   specialize qw/aom_variance16x16     sse2 avx2 neon msa/;
   specialize qw/aom_variance16x8      sse2 avx2 neon msa/;
   specialize qw/aom_variance8x16      sse2      neon msa/;
@@ -1255,7 +1224,6 @@ if (aom_config("CONFIG_AV1_ENCODER") eq "yes") {
   specialize qw/aom_sub_pixel_variance128x128   avx2 neon msa sse2 ssse3/;
   specialize qw/aom_sub_pixel_variance128x64    avx2 neon msa sse2 ssse3/;
   specialize qw/aom_sub_pixel_variance64x128    avx2 neon msa sse2 ssse3/;
-if (aom_config("CONFIG_EXT_RECUR_PARTITIONS") eq "") {
   specialize qw/aom_sub_pixel_variance64x64     avx2 neon msa sse2 ssse3/;
   specialize qw/aom_sub_pixel_variance64x32     avx2 neon msa sse2 ssse3/;
   specialize qw/aom_sub_pixel_variance32x64     avx2 neon msa sse2 ssse3/;
@@ -1264,7 +1232,6 @@ if (aom_config("CONFIG_EXT_RECUR_PARTITIONS") eq "") {
   specialize qw/aom_sub_pixel_variance16x32     avx2 neon msa sse2 ssse3/;
   specialize qw/aom_sub_pixel_variance16x16     avx2 neon msa sse2 ssse3/;
   specialize qw/aom_sub_pixel_variance16x8      avx2 neon msa sse2 ssse3/;
-} # CONFIG_EXT_RECUR_PARTITIONS
   specialize qw/aom_sub_pixel_variance8x16           neon msa sse2 ssse3/;
   specialize qw/aom_sub_pixel_variance8x8            neon msa sse2 ssse3/;
   specialize qw/aom_sub_pixel_variance8x4            neon msa sse2 ssse3/;
@@ -1274,7 +1241,6 @@ if (aom_config("CONFIG_EXT_RECUR_PARTITIONS") eq "") {
   specialize qw/aom_sub_pixel_avg_variance128x128 avx2     sse2 ssse3/;
   specialize qw/aom_sub_pixel_avg_variance128x64  avx2     sse2 ssse3/;
   specialize qw/aom_sub_pixel_avg_variance64x128  avx2     sse2 ssse3/;
-if (aom_config("CONFIG_EXT_RECUR_PARTITIONS") eq "") {
   specialize qw/aom_sub_pixel_avg_variance64x64   avx2 msa sse2 ssse3/;
   specialize qw/aom_sub_pixel_avg_variance64x32   avx2 msa sse2 ssse3/;
   specialize qw/aom_sub_pixel_avg_variance32x64   avx2 msa sse2 ssse3/;
@@ -1283,7 +1249,6 @@ if (aom_config("CONFIG_EXT_RECUR_PARTITIONS") eq "") {
   specialize qw/aom_sub_pixel_avg_variance16x32        msa sse2 ssse3/;
   specialize qw/aom_sub_pixel_avg_variance16x16        msa sse2 ssse3/;
   specialize qw/aom_sub_pixel_avg_variance16x8         msa sse2 ssse3/;
-} # CONFIG_EXT_RECUR_PARTITIONS
   specialize qw/aom_sub_pixel_avg_variance8x16         msa sse2 ssse3/;
   specialize qw/aom_sub_pixel_avg_variance8x8          msa sse2 ssse3/;
   specialize qw/aom_sub_pixel_avg_variance8x4          msa sse2 ssse3/;
@@ -1355,9 +1320,7 @@ if (aom_config("CONFIG_EXT_RECUR_PARTITIONS") eq "") {
       if ($w == 4 && $h == 4) {
           specialize "aom_highbd_${bd}_variance${w}x${h}", "sse4_1";
         }
-      if ($w != 128 && $h != 128 && $w != 4 &&
-          ((aom_config("CONFIG_EXT_RECUR_PARTITIONS") eq "") || (!($w == 8 && $h == 16) && !($w == 16 && $h == 32)))) {
-        # 8x16 and 16x32 functions have an alignment issue with CONFIG_EXT_RECUR_PARTITIONS experiment. So disabled for now.
+      if ($w != 128 && $h != 128 && $w != 4) {
         specialize "aom_highbd_${bd}_sub_pixel_variance${w}x${h}", qw/sse2/;
         specialize "aom_highbd_${bd}_sub_pixel_avg_variance${w}x${h}", qw/sse2/;
       }
