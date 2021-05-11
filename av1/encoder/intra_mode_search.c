@@ -52,7 +52,7 @@ static int64_t calc_rd_given_intra_angle(
   MACROBLOCKD *xd = &x->e_mbd;
   MB_MODE_INFO *mbmi = xd->mi[0];
   const int n4 = bsize_to_num_blk(bsize);
-  assert(!is_inter_block(mbmi));
+  assert(!is_inter_block(mbmi, xd->tree_type));
   mbmi->angle_delta[PLANE_TYPE_Y] = angle_delta;
   if (!skip_model_rd) {
     if (model_intra_yrd_and_prune(cpi, x, bsize, mode_cost, best_model_rd)) {
@@ -232,7 +232,11 @@ static int64_t pick_intra_angle_routine_sbuv(
     int rate_overhead, int64_t best_rd_in, int *rate, RD_STATS *rd_stats,
     int *best_angle_delta, int64_t *best_rd) {
   MB_MODE_INFO *mbmi = x->e_mbd.mi[0];
+#if CONFIG_SDP
+  assert(!is_inter_block(mbmi, cpi->td.mb.e_mbd.tree_type));
+#else
   assert(!is_inter_block(mbmi));
+#endif
   int this_rate;
   int64_t this_rd;
   RD_STATS tokenonly_rd_stats;
@@ -267,7 +271,11 @@ static int rd_pick_intra_angle_sbuv(const AV1_COMP *const cpi, MACROBLOCK *x,
                                     RD_STATS *rd_stats) {
   MACROBLOCKD *const xd = &x->e_mbd;
   MB_MODE_INFO *mbmi = xd->mi[0];
+#if CONFIG_SDP
+  assert(!is_inter_block(mbmi, xd->tree_type));
+#else
   assert(!is_inter_block(mbmi));
+#endif
   int i, angle_delta, best_angle_delta = 0;
   int64_t this_rd, best_rd_in, rd_cost[2 * (MAX_ANGLE_DELTA + 2)];
 
@@ -454,7 +462,11 @@ int64_t av1_rd_pick_intra_sbuv_mode(const AV1_COMP *const cpi, MACROBLOCK *x,
   const AV1_COMMON *const cm = &cpi->common;
   MACROBLOCKD *xd = &x->e_mbd;
   MB_MODE_INFO *mbmi = xd->mi[0];
+#if CONFIG_SDP
+  assert(!is_inter_block(mbmi, xd->tree_type));
+#else
   assert(!is_inter_block(mbmi));
+#endif
   MB_MODE_INFO best_mbmi = *mbmi;
   int64_t best_rd = INT64_MAX, this_rd;
   const ModeCosts *mode_costs = &x->mode_costs;
@@ -756,7 +768,7 @@ static int64_t rd_pick_intra_angle_sby(const AV1_COMP *const cpi, MACROBLOCK *x,
                                        int skip_model_rd_for_zero_deg) {
   MACROBLOCKD *xd = &x->e_mbd;
   MB_MODE_INFO *mbmi = xd->mi[0];
-  assert(!is_inter_block(mbmi));
+  assert(!is_inter_block(mbmi, xd->tree_type));
 
   int best_angle_delta = 0;
   int64_t rd_cost[2 * (MAX_ANGLE_DELTA + 2)];
@@ -1089,7 +1101,11 @@ int64_t av1_rd_pick_intra_sby_mode(const AV1_COMP *const cpi, MACROBLOCK *x,
                                    PICK_MODE_CONTEXT *ctx) {
   MACROBLOCKD *const xd = &x->e_mbd;
   MB_MODE_INFO *const mbmi = xd->mi[0];
+#if CONFIG_SDP
+  assert(!is_inter_block(mbmi, xd->tree_type));
+#else
   assert(!is_inter_block(mbmi));
+#endif
   int64_t best_model_rd = INT64_MAX;
   int is_directional_mode;
   uint8_t directional_mode_skip_mask[INTRA_MODES] = { 0 };

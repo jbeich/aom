@@ -2162,7 +2162,11 @@ static AOM_INLINE int find_ref_match_in_above_nbs(const int total_mi_cols,
     mi_step = mi_size_wide[above_mi[0]->sb_type];
 #endif
     int match_found = 0;
+#if CONFIG_SDP
+    if (is_inter_block(*above_mi, xd->tree_type))
+#else
     if (is_inter_block(*above_mi))
+#endif
       match_found = ref_match_found_in_nb_blocks(*cur_mbmi, *above_mi);
     if (match_found) return 1;
   }
@@ -2188,7 +2192,11 @@ static AOM_INLINE int find_ref_match_in_left_nbs(const int total_mi_rows,
     mi_step = mi_size_high[left_mi[0]->sb_type];
 #endif
     int match_found = 0;
+#if CONFIG_SDP
+    if (is_inter_block(*left_mi, xd->tree_type))
+#else
     if (is_inter_block(*left_mi))
+#endif
       match_found = ref_match_found_in_nb_blocks(*cur_mbmi, *left_mi);
     if (match_found) return 1;
   }
@@ -3405,7 +3413,7 @@ static AOM_INLINE void rd_pick_skip_mode(
         search_state->best_mbmode.tx_size, xd->width, xd->height,
 #if CONFIG_SDP
         search_state->best_mbmode.skip_txfm[xd->tree_type == CHROMA_PART] &&
-            is_inter_block(mbmi),
+            is_inter_block(mbmi, xd->tree_type),
 #else
         search_state->best_mbmode.skip_txfm && is_inter_block(mbmi),
 #endif
@@ -4571,7 +4579,11 @@ static int compound_skip_by_single_states(
 static INLINE void match_ref_frame(const MB_MODE_INFO *const mbmi,
                                    const MV_REFERENCE_FRAME *ref_frames,
                                    int *const is_ref_match) {
+#if CONFIG_SDP
+  if (is_inter_block(mbmi, SHARED_PART)) {
+#else
   if (is_inter_block(mbmi)) {
+#endif
     is_ref_match[0] |= ref_frames[0] == mbmi->ref_frame[0];
     is_ref_match[1] |= ref_frames[1] == mbmi->ref_frame[0];
     if (has_second_ref(mbmi)) {
@@ -5649,9 +5661,25 @@ void av1_rd_pick_inter_mode_sb(struct AV1_COMP *cpi,
   const InterpFilter interp_filter = features->interp_filter;
 #if CONFIG_REMOVE_DUAL_FILTER
   (void)interp_filter;
+#if CONFIG_SDP
+  assert((interp_filter == SWITCHABLE) ||
+         (interp_filter == search_state.best_mbmode.interp_fltr) ||
+         !is_inter_block(&search_state.best_mbmode, xd->tree_type));
+#else
   assert((interp_filter == SWITCHABLE) ||
          (interp_filter == search_state.best_mbmode.interp_fltr) ||
          !is_inter_block(&search_state.best_mbmode));
+#endif
+#else
+#if CONFIG_SDP
+  assert((interp_filter == SWITCHABLE) ||
+         (interp_filter ==
+          search_state.best_mbmode.interp_filters.as_filters.y_filter) ||
+         !is_inter_block(&search_state.best_mbmode, xd->tree_type));
+  assert((interp_filter == SWITCHABLE) ||
+         (interp_filter ==
+          search_state.best_mbmode.interp_filters.as_filters.x_filter) ||
+         !is_inter_block(&search_state.best_mbmode, xd->tree_type));
 #else
   assert((interp_filter == SWITCHABLE) ||
          (interp_filter ==
@@ -5661,6 +5689,7 @@ void av1_rd_pick_inter_mode_sb(struct AV1_COMP *cpi,
          (interp_filter ==
           search_state.best_mbmode.interp_filters.as_filters.x_filter) ||
          !is_inter_block(&search_state.best_mbmode));
+#endif
 #endif  // CONFIG_REMOVE_DUAL_FILTER
 
   if (!cpi->rc.is_src_frame_alt_ref && cpi->sf.inter_sf.adaptive_rd_thresh) {
