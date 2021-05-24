@@ -318,7 +318,11 @@ void av1_free_ptree_recursive(PARTITION_TREE *ptree);
 typedef struct SB_INFO {
   int mi_row;
   int mi_col;
+#if CONFIG_SDP
   PARTITION_TREE *ptree_root[2];
+#else
+  PARTITION_TREE *ptree_root;
+#endif  // CONFIG_SDP
 } SB_INFO;
 
 void av1_reset_ptree_in_sbi(SB_INFO *sbi

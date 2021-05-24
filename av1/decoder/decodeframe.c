@@ -3001,7 +3001,7 @@ static AOM_INLINE void decode_tile(AV1Decoder *pbi, ThreadData *const td,
       decode_partition_sb(pbi, td, mi_row, mi_col, td->bit_reader,
                           cm->seq_params.sb_size, 0x3);
 #else
-      av1_reset_ptree_in_sbi(xd->sbi, xd->tree_type);
+      av1_reset_ptree_in_sbi(xd->sbi);
       // Bit-stream parsing and decoding of the superblock
       decode_partition(pbi, td, mi_row, mi_col, td->bit_reader,
                        cm->seq_params.sb_size, xd->sbi->ptree_root, 0x3);
@@ -3447,7 +3447,7 @@ static AOM_INLINE void parse_tile_row_mt(AV1Decoder *pbi, ThreadData *const td,
       decode_partition_sb(pbi, td, mi_row, mi_col, td->bit_reader,
                           cm->seq_params.sb_size, 0x1);
 #else
-      av1_reset_ptree_in_sbi(xd->sbi, xd->tree_type);
+      av1_reset_ptree_in_sbi(xd->sbi);
       decode_partition(pbi, td, mi_row, mi_col, td->bit_reader,
                        cm->seq_params.sb_size, xd->sbi->ptree_root, 0x1);
 #endif

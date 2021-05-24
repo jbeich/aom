@@ -118,8 +118,9 @@ void av1_free_ptree_recursive(PARTITION_TREE *ptree) {
   aom_free(ptree);
 }
 
-void av1_reset_ptree_in_sbi(SB_INFO *sbi,
+void av1_reset_ptree_in_sbi(SB_INFO *sbi
 #if CONFIG_SDP
+                            ,
                             TREE_TYPE tree_type
 #endif  // CONFIG_SDP
 ) {
