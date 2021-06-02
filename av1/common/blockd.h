@@ -1534,18 +1534,65 @@ static INLINE BLOCK_SIZE get_plane_block_size(BLOCK_SIZE bsize,
   return ss_size_lookup[bsize][subsampling_x][subsampling_y];
 }
 
-#if CONFIG_EXT_RECUR_PARTITIONS
-static INLINE BLOCK_SIZE get_mb_plane_block_size(const MB_MODE_INFO *mbmi,
+#if CONFIG_SDP
+static INLINE int av1_get_sdp_idx(TREE_TYPE tree_type) {
+  switch (tree_type) {
+    case SHARED_PART:
+    case LUMA_PART: return 0;
+    case CHROMA_PART: return 1; break;
+    default: assert(0 && "Invalid tree type"); return 0;
+  }
+}
+#endif  // CONFIG_SDP
+
+#if CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP
+static INLINE BLOCK_SIZE get_bsize_base(const MACROBLOCKD *xd,
+                                        const MB_MODE_INFO *mbmi, int plane) {
+  BLOCK_SIZE bsize_base = BLOCK_INVALID;
+#if CONFIG_SDP
+  if (xd->tree_type == SHARED_PART) {
+    bsize_base =
+        plane ? mbmi->chroma_ref_info.bsize_base : mbmi->sb_type[PLANE_TYPE_Y];
+  } else {
+    bsize_base = mbmi->sb_type[av1_get_sdp_idx(xd->tree_type)];
+  }
+#else
+  bsize_base = plane ? mbmi->chroma_ref_info.bsize_base : mbmi->sb_type;
+  (void)xd;
+#endif  // CONFIG_SDP
+  return bsize_base;
+}
+
+static INLINE BLOCK_SIZE get_mb_plane_block_size(const MACROBLOCKD *xd,
+                                                 const MB_MODE_INFO *mbmi,
                                                  int plane, int subsampling_x,
                                                  int subsampling_y) {
   assert(subsampling_x >= 0 && subsampling_x < 2);
   assert(subsampling_y >= 0 && subsampling_y < 2);
-
-  const BLOCK_SIZE bsize_base =
-      plane ? mbmi->chroma_ref_info.bsize_base : mbmi->sb_type;
+  const BLOCK_SIZE bsize_base = get_bsize_base(xd, mbmi, plane);
   return get_plane_block_size(bsize_base, subsampling_x, subsampling_y);
 }
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
+#endif  // CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP
+
+#if CONFIG_SDP
+// This is only needed to support lpf multi-thread.
+// because xd is shared among all the threads workers, xd->tree_type does not
+// contain the valid tree_type, so we are passing in the tree_type
+static INLINE BLOCK_SIZE get_mb_plane_block_size_from_tree_type(
+    const MB_MODE_INFO *mbmi, TREE_TYPE tree_type, int plane, int subsampling_x,
+    int subsampling_y) {
+  assert(subsampling_x >= 0 && subsampling_x < 2);
+  assert(subsampling_y >= 0 && subsampling_y < 2);
+  BLOCK_SIZE bsize_base = BLOCK_INVALID;
+  if (tree_type == SHARED_PART) {
+    bsize_base =
+        plane ? mbmi->chroma_ref_info.bsize_base : mbmi->sb_type[PLANE_TYPE_Y];
+  } else {
+    bsize_base = mbmi->sb_type[av1_get_sdp_idx(tree_type)];
+  }
+  return get_plane_block_size(bsize_base, subsampling_x, subsampling_y);
+}
+#endif  // CONFIG_SDP
 
 /*
  * Logic to generate the lookup tables:
@@ -2008,17 +2055,6 @@ static INLINE int av1_get_max_eob(TX_SIZE tx_size) {
   }
   return tx_size_2d[tx_size];
 }
-
-#if CONFIG_SDP
-static INLINE int av1_get_sdp_idx(TREE_TYPE tree_type) {
-  switch (tree_type) {
-    case SHARED_PART:
-    case LUMA_PART: return 0;
-    case CHROMA_PART: return 1; break;
-    default: assert(0 && "Invalid tree type"); return 0;
-  }
-}
-#endif  // CONFIG_SDP
 
 /*!\endcond */
 

@@ -336,20 +336,20 @@ void av1_read_coeffs_txb_facade(const AV1_COMMON *const cm,
   MACROBLOCKD *const xd = &dcb->xd;
   MB_MODE_INFO *const mbmi = xd->mi[0];
   struct macroblockd_plane *const pd = &xd->plane[plane];
-#if CONFIG_EXT_RECUR_PARTITIONS
-  assert(mbmi->sb_type < BLOCK_SIZES_ALL);
+#if CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP
   const BLOCK_SIZE plane_bsize = get_mb_plane_block_size(
-      mbmi, plane, pd->subsampling_x, pd->subsampling_y);
-#else
+      xd, mbmi, plane, pd->subsampling_x, pd->subsampling_y);
 #if CONFIG_SDP
-  const BLOCK_SIZE bsize = mbmi->sb_type[plane > 0];
+  assert(plane_bsize == get_plane_block_size(mbmi->sb_type[plane > 0],
+                                             pd->subsampling_x,
+                                             pd->subsampling_y));
+#endif  // CONFIG_SDP
 #else
   const BLOCK_SIZE bsize = mbmi->sb_type;
-#endif  // CONFIG_SDP
   assert(bsize < BLOCK_SIZES_ALL);
   const BLOCK_SIZE plane_bsize =
       get_plane_block_size(bsize, pd->subsampling_x, pd->subsampling_y);
-#endif  // CONFIG_EXT_RECUR_PARTITIOS
+#endif  // CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP
 
   TXB_CTX txb_ctx;
   get_txb_ctx(plane_bsize, tx_size, plane, pd->above_entropy_context + col,

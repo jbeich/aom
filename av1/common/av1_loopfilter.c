@@ -198,7 +198,9 @@ static TX_SIZE get_transform_size(const MACROBLOCKD *const xd,
   assert(mbmi != NULL);
   if (xd && xd->lossless[mbmi->segment_id]) return TX_4X4;
 #if CONFIG_SDP
-  const int plane_type = (plane > 0 && cm->seq_params.enable_sdp);
+  const int plane_type =
+      (frame_is_intra_only(cm) && !cm->seq_params.monochrome && plane > 0 &&
+       cm->seq_params.enable_sdp);
 #endif
   TX_SIZE tx_size = (plane == AOM_PLANE_Y)
                         ? mbmi->tx_size
@@ -257,8 +259,15 @@ static TX_SIZE set_lpf_parameters(
   params->filter_length = 0;
 
 #if CONFIG_SDP
-  const int plane_type = (plane > 0 && cm->seq_params.enable_sdp);
-#endif
+  TREE_TYPE tree_type = SHARED_PART;
+  const bool is_sdp_eligible = frame_is_intra_only(cm) &&
+                               !cm->seq_params.monochrome &&
+                               cm->seq_params.enable_sdp;
+  if (is_sdp_eligible) {
+    tree_type = (plane == AOM_PLANE_Y) ? LUMA_PART : CHROMA_PART;
+  }
+  const int plane_type = is_sdp_eligible && plane > 0;
+#endif  // CONFIG_SDP
 
   // no deblocking is required
   const uint32_t width = plane_ptr->dst.width;
@@ -335,14 +344,18 @@ static TX_SIZE set_lpf_parameters(
 #else
               mi_prev->skip_txfm && is_inter_block(mi_prev);
 #endif
-#if CONFIG_EXT_RECUR_PARTITIONS
-          const BLOCK_SIZE bsize = get_mb_plane_block_size(
-              mbmi, plane, plane_ptr->subsampling_x, plane_ptr->subsampling_y);
-#elif CONFIG_SDP
-          const BLOCK_SIZE bsize = get_plane_block_size(
-              mbmi->sb_type[plane > 0], plane_ptr->subsampling_x,
+#if CONFIG_SDP
+          const BLOCK_SIZE bsize = get_mb_plane_block_size_from_tree_type(
+              mbmi, tree_type, plane, plane_ptr->subsampling_x,
               plane_ptr->subsampling_y);
-#else  // !CONFIG_EXT_RECUR_PARTITIONS && ! CONFIG_SDP
+          assert(bsize == get_plane_block_size(mbmi->sb_type[plane_type],
+                                               plane_ptr->subsampling_x,
+                                               plane_ptr->subsampling_y));
+#elif CONFIG_EXT_RECUR_PARTITIONS
+          const BLOCK_SIZE bsize =
+              get_mb_plane_block_size(xd, mbmi, plane, plane_ptr->subsampling_x,
+                                      plane_ptr->subsampling_y);
+#else  // !CONFIG_EXT_RECUR_PARTITIONS && !CONFIG_SDP
           const BLOCK_SIZE bsize =
               get_plane_block_size(mbmi->sb_type, plane_ptr->subsampling_x,
                                    plane_ptr->subsampling_y);

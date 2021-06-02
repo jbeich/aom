@@ -653,21 +653,23 @@ void av1_encode_sb(const struct AV1_COMP *cpi, MACROBLOCK *x,
     const int subsampling_y = pd->subsampling_y;
     if (plane && !xd->is_chroma_ref) break;
 
-#if CONFIG_EXT_RECUR_PARTITIONS
+#if CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP
     const BLOCK_SIZE plane_bsize =
-        get_mb_plane_block_size(mbmi, plane, subsampling_x, subsampling_y);
-#else
+        get_mb_plane_block_size(xd, mbmi, plane, subsampling_x, subsampling_y);
 #if CONFIG_SDP
     const BLOCK_SIZE bsize_base =
         plane ? mbmi->chroma_ref_info.bsize_base
               : mbmi->sb_type[xd->tree_type == CHROMA_PART];
+    assert(plane_bsize ==
+           get_plane_block_size(bsize_base, subsampling_x, subsampling_y));
+    (void)bsize_base;
+#endif  // CONFIG_SDP
 #else
     const BLOCK_SIZE bsize_base =
         plane ? mbmi->chroma_ref_info.bsize_base : mbmi->sb_type;
-#endif  // CONFIG_SDP
     const BLOCK_SIZE plane_bsize =
         get_plane_block_size(bsize_base, subsampling_x, subsampling_y);
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
+#endif  // CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP
     assert(plane_bsize < BLOCK_SIZES_ALL);
     const int mi_width = mi_size_wide[plane_bsize];
     const int mi_height = mi_size_high[plane_bsize];
@@ -858,16 +860,18 @@ void av1_encode_intra_block_plane(const struct AV1_COMP *cpi, MACROBLOCK *x,
 
   struct encode_b_args arg = { cpi, x,  NULL,    skip_txfm,
                                ta,  tl, dry_run, enable_optimize_b };
-#if CONFIG_EXT_RECUR_PARTITIONS
+#if CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP
   const BLOCK_SIZE plane_bsize =
-      get_mb_plane_block_size(xd->mi[0], plane, ss_x, ss_y);
-#elif CONFIG_SDP
-  const BLOCK_SIZE plane_bsize = get_plane_block_size(bsize, ss_x, ss_y);
+      get_mb_plane_block_size(xd, xd->mi[0], plane, ss_x, ss_y);
+#if CONFIG_SDP
+  assert(plane_bsize == get_plane_block_size(bsize, ss_x, ss_y));
+  (void)bsize;
+#endif  // CONFIG_SDP
 #else
-const BLOCK_SIZE bsize_base =
-    plane ? xd->mi[0]->chroma_ref_info.bsize_base : bsize;
-const BLOCK_SIZE plane_bsize = get_plane_block_size(bsize_base, ss_x, ss_y);
-#endif
+  const BLOCK_SIZE bsize_base =
+      plane ? xd->mi[0]->chroma_ref_info.bsize_base : bsize;
+  const BLOCK_SIZE plane_bsize = get_plane_block_size(bsize_base, ss_x, ss_y);
+#endif  // CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP
   if (enable_optimize_b) {
     av1_get_entropy_contexts(plane_bsize, pd, ta, tl);
   }

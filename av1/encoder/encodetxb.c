@@ -1582,6 +1582,9 @@ void av1_update_intra_mb_txb_context(const AV1_COMP *cpi, ThreadData *td,
   if (mbmi->skip_txfm) {
 #endif  // CONFIG_SDP
 #if CONFIG_EXT_RECUR_PARTITIONS
+#if CONFIG_SDP
+    assert(bsize == mbmi->sb_type[av1_get_sdp_idx(xd->tree_type)]);
+#endif  // CONFIG_SDP
     av1_reset_entropy_context(xd, num_planes);
 #else
     av1_reset_entropy_context(xd, bsize, num_planes);
@@ -1599,12 +1602,15 @@ void av1_update_intra_mb_txb_context(const AV1_COMP *cpi, ThreadData *td,
     const struct macroblockd_plane *const pd = &xd->plane[plane];
     const int ss_x = pd->subsampling_x;
     const int ss_y = pd->subsampling_y;
-#if CONFIG_EXT_RECUR_PARTITIONS
+#if CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP
     const BLOCK_SIZE plane_bsize =
-        get_mb_plane_block_size(mbmi, plane, ss_x, ss_y);
+        get_mb_plane_block_size(xd, mbmi, plane, ss_x, ss_y);
+#if CONFIG_SDP
+    assert(plane_bsize == get_plane_block_size(bsize, ss_x, ss_y));
+#endif  // CONFIG_SDP
 #else
     const BLOCK_SIZE plane_bsize = get_plane_block_size(bsize, ss_x, ss_y);
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
+#endif  // CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP
     av1_foreach_transformed_block_in_plane(
         xd, plane_bsize, plane, av1_update_and_record_txb_context, &arg);
   }

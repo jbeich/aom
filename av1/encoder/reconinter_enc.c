@@ -336,14 +336,18 @@ void av1_build_inter_predictors_for_planes_single_buf(
 
   for (int plane = plane_from; plane <= plane_to; ++plane) {
     const struct macroblockd_plane *pd = &xd->plane[plane];
-#if CONFIG_EXT_RECUR_PARTITIONS
-    assert(mi->sb_type < BLOCK_SIZES_ALL);
+#if CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP
     const BLOCK_SIZE plane_bsize = get_mb_plane_block_size(
-        mi, plane, pd->subsampling_x, pd->subsampling_y);
+        xd, mi, plane, pd->subsampling_x, pd->subsampling_y);
+#if CONFIG_SDP
+    assert(plane_bsize ==
+           get_plane_block_size(bsize, pd->subsampling_x, pd->subsampling_y));
+    (void)bsize;
+#endif  // CONFIG_SDP
 #else
     const BLOCK_SIZE plane_bsize =
         get_plane_block_size(bsize, pd->subsampling_x, pd->subsampling_y);
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
+#endif  // CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP
     const int bw = block_size_wide[plane_bsize];
     const int bh = block_size_high[plane_bsize];
 
@@ -474,14 +478,20 @@ void av1_build_wedge_inter_predictor_from_buf(MACROBLOCKD *xd, BLOCK_SIZE bsize,
 #endif  // CONFIG_EXT_RECUR_PARTITIONS
   int plane;
   for (plane = plane_from; plane <= plane_to; ++plane) {
-#if CONFIG_EXT_RECUR_PARTITIONS
+#if CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP
     const BLOCK_SIZE plane_bsize = get_mb_plane_block_size(
-        xd->mi[0], plane, xd->plane[plane].subsampling_x,
+        xd, xd->mi[0], plane, xd->plane[plane].subsampling_x,
         xd->plane[plane].subsampling_y);
+#if CONFIG_SDP
+    assert(plane_bsize == get_plane_block_size(bsize,
+                                               xd->plane[plane].subsampling_x,
+                                               xd->plane[plane].subsampling_y));
+    (void)bsize;
+#endif  // CONFIG_SDP
 #else
     const BLOCK_SIZE plane_bsize = get_plane_block_size(
         bsize, xd->plane[plane].subsampling_x, xd->plane[plane].subsampling_y);
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
+#endif  // CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP
     const int bw = block_size_wide[plane_bsize];
     const int bh = block_size_high[plane_bsize];
     build_wedge_inter_predictor_from_buf(

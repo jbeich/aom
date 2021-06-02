@@ -1404,7 +1404,8 @@ void av1_build_intra_predictors_for_interintra(const AV1_COMMON *cm,
   const int ssx = xd->plane[plane].subsampling_x;
   const int ssy = xd->plane[plane].subsampling_y;
 #if CONFIG_EXT_RECUR_PARTITIONS
-  BLOCK_SIZE plane_bsize = get_mb_plane_block_size(xd->mi[0], plane, ssx, ssy);
+  BLOCK_SIZE plane_bsize =
+      get_mb_plane_block_size(xd, xd->mi[0], plane, ssx, ssy);
 #else
   BLOCK_SIZE plane_bsize = get_plane_block_size(bsize, ssx, ssy);
 #endif  // CONFIG_EXT_RECUR_PARTITIONS
@@ -1429,8 +1430,12 @@ void av1_combine_interintra(MACROBLOCKD *xd, BLOCK_SIZE bsize, int plane,
                             const uint8_t *intra_pred, int intra_stride) {
   const int ssx = xd->plane[plane].subsampling_x;
   const int ssy = xd->plane[plane].subsampling_y;
-#if CONFIG_EXT_RECUR_PARTITIONS
-  BLOCK_SIZE plane_bsize = get_mb_plane_block_size(xd->mi[0], plane, ssx, ssy);
+#if CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP
+  BLOCK_SIZE plane_bsize =
+      get_mb_plane_block_size(xd, xd->mi[0], plane, ssx, ssy);
+#if CONFIG_SDP
+  assert(plane_bsize == get_plane_block_size(bsize, ssx, ssy));
+#endif  // CONFIG_SDP
 #else
   BLOCK_SIZE plane_bsize = get_plane_block_size(bsize, ssx, ssy);
 #endif  // CONFIG_EXT_RECUR_PARTITIONS

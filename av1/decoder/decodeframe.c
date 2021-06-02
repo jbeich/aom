@@ -1045,13 +1045,16 @@ static AOM_INLINE void decode_token_recon_block(AV1Decoder *const pbi,
             const struct macroblockd_plane *const pd = &xd->plane[plane];
             const int ss_x = pd->subsampling_x;
             const int ss_y = pd->subsampling_y;
-#if CONFIG_EXT_RECUR_PARTITIONS
+#if CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP
             const BLOCK_SIZE plane_bsize =
-                get_mb_plane_block_size(mbmi, plane, ss_x, ss_y);
+                get_mb_plane_block_size(xd, mbmi, plane, ss_x, ss_y);
+#if CONFIG_SDP
+            assert(plane_bsize == get_plane_block_size(bsize, ss_x, ss_y));
+#endif  // CONFIG_SDP
 #else
             const BLOCK_SIZE plane_bsize =
                 get_plane_block_size(bsize, ss_x, ss_y);
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
+#endif  // CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP
             const TX_SIZE max_tx_size =
                 get_vartx_max_txsize(xd, plane_bsize, plane);
             const int bh_var_tx = tx_size_high_unit[max_tx_size];
@@ -1356,6 +1359,9 @@ static AOM_INLINE void parse_decode_block(AV1Decoder *const pbi,
     }
   }
 #if CONFIG_EXT_RECUR_PARTITIONS
+#if CONFIG_SDP
+  assert(bsize == mbmi->sb_type[av1_get_sdp_idx(xd->tree_type)]);
+#endif  // CONFIG_SDP
   if (mbmi->skip_txfm) av1_reset_entropy_context(xd, num_planes);
 #elif CONFIG_SDP
   if (mbmi->skip_txfm[xd->tree_type == CHROMA_PART])

@@ -176,9 +176,14 @@ void av1_reset_entropy_context(MACROBLOCKD *xd, BLOCK_SIZE bsize,
   const int nplanes = 1 + (num_planes - 1) * xd->is_chroma_ref;
   for (int i = 0; i < nplanes; i++) {
     struct macroblockd_plane *const pd = &xd->plane[i];
-#if CONFIG_EXT_RECUR_PARTITIONS
+#if CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP
     const BLOCK_SIZE plane_bsize = get_mb_plane_block_size(
-        xd->mi[0], i, pd->subsampling_x, pd->subsampling_y);
+        xd, xd->mi[0], i, pd->subsampling_x, pd->subsampling_y);
+#if CONFIG_SDP
+    assert(plane_bsize ==
+           get_plane_block_size(bsize, pd->subsampling_x, pd->subsampling_y));
+    (void)bsize;
+#endif  // CONFIG_SDP
 #else
     const BLOCK_SIZE plane_bsize =
         get_plane_block_size(bsize, pd->subsampling_x, pd->subsampling_y);

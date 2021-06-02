@@ -1576,19 +1576,20 @@ static AOM_INLINE void write_inter_txb_coeff(
   const struct macroblockd_plane *const pd = &xd->plane[plane];
   const int ss_x = pd->subsampling_x;
   const int ss_y = pd->subsampling_y;
-#if CONFIG_EXT_RECUR_PARTITIONS
-  assert(mbmi->sb_type < BLOCK_SIZES_ALL);
+#if CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP
   const BLOCK_SIZE plane_bsize =
-      get_mb_plane_block_size(mbmi, plane, ss_x, ss_y);
-#else
+      get_mb_plane_block_size(xd, mbmi, plane, ss_x, ss_y);
 #if CONFIG_SDP
-  const BLOCK_SIZE bsize = mbmi->sb_type[PLANE_TYPE_Y];
+  assert(plane_bsize ==
+         get_plane_block_size(mbmi->sb_type[PLANE_TYPE_Y], ss_x, ss_y));
+#else
+  assert(mbmi->sb_type < BLOCK_SIZES_ALL);
+#endif  // CONFIG_SDP
 #else
   const BLOCK_SIZE bsize = mbmi->sb_type;
-#endif  // CONFIG_SDP
   assert(bsize < BLOCK_SIZES_ALL);
   const BLOCK_SIZE plane_bsize = get_plane_block_size(bsize, ss_x, ss_y);
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
+#endif  // CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP
   const TX_SIZE max_tx_size = get_vartx_max_txsize(xd, plane_bsize, plane);
   const int step =
       tx_size_wide_unit[max_tx_size] * tx_size_high_unit[max_tx_size];

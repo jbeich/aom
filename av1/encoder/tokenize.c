@@ -156,17 +156,18 @@ static void tokenize_vartx(ThreadData *td, TX_SIZE tx_size,
 #endif
 
   if (tx_size == plane_tx_size || plane) {
-#if CONFIG_EXT_RECUR_PARTITIONS
-    plane_bsize = get_mb_plane_block_size(mbmi, plane, pd->subsampling_x,
+#if CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP
+    plane_bsize = get_mb_plane_block_size(xd, mbmi, plane, pd->subsampling_x,
                                           pd->subsampling_y);
-#elif CONFIG_SDP
-    plane_bsize =
-        get_plane_block_size(mbmi->sb_type[xd->tree_type == CHROMA_PART],
-                             pd->subsampling_x, pd->subsampling_y);
-#else  // !CONFIG_EXT_RECUR_PARTITIONS && !CONFIG_SDP
+#if CONFIG_SDP
+    assert(plane_bsize ==
+           get_plane_block_size(mbmi->sb_type[xd->tree_type == CHROMA_PART],
+                                pd->subsampling_x, pd->subsampling_y));
+#endif  // CONFIG_SDP
+#else
     plane_bsize = get_plane_block_size(mbmi->sb_type, pd->subsampling_x,
                                        pd->subsampling_y);
-#endif
+#endif  // CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP
     av1_update_and_record_txb_context(plane, block, blk_row, blk_col,
                                       plane_bsize, tx_size, arg);
   } else {
@@ -221,6 +222,9 @@ void av1_tokenize_sb_vartx(const AV1_COMP *cpi, ThreadData *td,
   if (mbmi->skip_txfm) {
 #endif
 #if CONFIG_EXT_RECUR_PARTITIONS
+#if CONFIG_SDP
+    assert(bsize == mbmi->sb_type[av1_get_sdp_idx(xd->tree_type)]);
+#endif  // CONFIG_SDP
     av1_reset_entropy_context(xd, num_planes);
 #else
     av1_reset_entropy_context(xd, bsize, num_planes);
@@ -238,14 +242,20 @@ void av1_tokenize_sb_vartx(const AV1_COMP *cpi, ThreadData *td,
     const struct macroblockd_plane *const pd = &xd->plane[plane];
     const int ss_x = pd->subsampling_x;
     const int ss_y = pd->subsampling_y;
-#if CONFIG_EXT_RECUR_PARTITIONS
+#if CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP
     const BLOCK_SIZE plane_bsize =
-        get_mb_plane_block_size(mbmi, plane, ss_x, ss_y);
+        get_mb_plane_block_size(xd, mbmi, plane, ss_x, ss_y);
+#if CONFIG_SDP
+    const BLOCK_SIZE bsize_base =
+        plane ? mbmi->chroma_ref_info.bsize_base : bsize;
+    (void)bsize_base;
+    assert(plane_bsize == get_plane_block_size(bsize_base, ss_x, ss_y));
+#endif  // CONFIG_DP
 #else
     const BLOCK_SIZE bsize_base =
         plane ? mbmi->chroma_ref_info.bsize_base : bsize;
     const BLOCK_SIZE plane_bsize = get_plane_block_size(bsize_base, ss_x, ss_y);
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
+#endif  // CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP
     assert(plane_bsize < BLOCK_SIZES_ALL);
     const int mi_width = mi_size_wide[plane_bsize];
     const int mi_height = mi_size_high[plane_bsize];
