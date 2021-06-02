@@ -500,9 +500,7 @@ static AOM_INLINE void encode_nonrd_sb(AV1_COMP *cpi, ThreadData *td,
   assert(sf->part_sf.partition_search_type == FIXED_PARTITION || seg_skip ||
          cpi->partition_search_skippable_frame ||
          sf->part_sf.partition_search_type == VAR_BASED_PARTITION);
-#if !CONFIG_SDP
   memset(td->mb.cb_offset, 0, sizeof(td->mb.cb_offset));
-#endif
 
   // Adjust and encode the superblock
 #if CONFIG_SDP
@@ -515,7 +513,6 @@ static AOM_INLINE void encode_nonrd_sb(AV1_COMP *cpi, ThreadData *td,
     xd->tree_type =
         (total_loop_num == 1 ? SHARED_PART
                              : (loop_idx == 0 ? LUMA_PART : CHROMA_PART));
-    td->mb.cb_offset[xd->tree_type == CHROMA_PART] = 0;
     PC_TREE *const pc_root = av1_alloc_pc_tree_node(
         mi_row, mi_col, sb_size, NULL, PARTITION_NONE, 0, 1,
         cm->seq_params.subsampling_x, cm->seq_params.subsampling_y);

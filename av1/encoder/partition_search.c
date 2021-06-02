@@ -1355,6 +1355,7 @@ static void encode_b(const AV1_COMP *const cpi, TileDataEnc *tile_data,
                      RUN_TYPE dry_run, BLOCK_SIZE bsize,
                      PARTITION_TYPE partition, PICK_MODE_CONTEXT *const ctx,
                      int *rate) {
+  const AV1_COMMON *const cm = &cpi->common;
   TileInfo *const tile = &tile_data->tile_info;
   MACROBLOCK *const x = &td->mb;
   MACROBLOCKD *xd = &x->e_mbd;
@@ -1368,29 +1369,33 @@ static void encode_b(const AV1_COMP *const cpi, TileDataEnc *tile_data,
   av1_update_state(cpi, td, ctx, mi_row, mi_col, bsize, dry_run);
 
 #if CONFIG_SDP
-  int plane_type = (xd->tree_type == CHROMA_PART);
-#endif
+  const int num_planes = av1_num_planes(cm);
+  const int plane_start = (xd->tree_type == CHROMA_PART);
+  const int plane_end = (xd->tree_type == LUMA_PART) ? 1 : num_planes;
+#endif  // CONFIG_SDP
 
   if (!dry_run) {
 #if CONFIG_SDP
-    x->mbmi_ext_frame->cb_offset[plane_type] = x->cb_offset[plane_type];
-    assert(x->cb_offset[plane_type] <
-           (1 << num_pels_log2_lookup[cpi->common.seq_params.sb_size]));
+    for (int plane = plane_start; plane < plane_end; plane++) {
+      x->mbmi_ext_frame->cb_offset[plane] = x->cb_offset[plane];
+      assert(x->cb_offset[plane] <
+             (1 << num_pels_log2_lookup[cpi->common.seq_params.sb_size]));
+    }
 #else
     memcpy(x->mbmi_ext_frame->cb_offset, x->cb_offset, sizeof(x->cb_offset));
     assert(x->cb_offset[0] <
            (1 << num_pels_log2_lookup[cpi->common.seq_params.sb_size]));
-#endif
+#endif  // CONFIG_SDP
   }
 
   encode_superblock(cpi, tile_data, td, tp, dry_run, bsize, rate);
 
   if (!dry_run) {
-    const AV1_COMMON *const cm = &cpi->common;
 #if CONFIG_SDP
-    x->cb_offset[plane_type] += block_size_wide[bsize] * block_size_high[bsize];
+    for (int plane = plane_start; plane < plane_end; ++plane) {
 #else
     for (int plane = 0; plane < MAX_MB_PLANE; ++plane) {
+#endif  // CONFIG_SDP
       if (plane == 0) {
         x->cb_offset[plane] += block_size_wide[bsize] * block_size_high[bsize];
       } else if (xd->is_chroma_ref) {
@@ -1399,7 +1404,6 @@ static void encode_b(const AV1_COMP *const cpi, TileDataEnc *tile_data,
             block_size_wide[bsize_base] * block_size_high[bsize_base];
       }
     }
-#endif
 #if CONFIG_SDP
     if (bsize == cpi->common.seq_params.sb_size &&
         mbmi->skip_txfm[xd->tree_type == CHROMA_PART] == 1 &&
@@ -2312,7 +2316,11 @@ void av1_rd_use_partition(AV1_COMP *cpi, ThreadData *td, TileDataEnc *tile_data,
       // encode_sb(cpi, td, tile_data, tp, mi_row, mi_col, DRY_RUN_COSTCOEFFS,
       //           bsize, pc_tree, &rate_coeffs);
 #if CONFIG_SDP
-      x->cb_offset[plane_type] = 0;
+      const int plane_start = (xd->tree_type == CHROMA_PART);
+      const int plane_end = (xd->tree_type == LUMA_PART) ? 1 : num_planes;
+      for (int plane = plane_start; plane < plane_end; plane++) {
+        x->cb_offset[plane] = 0;
+      }
       av1_reset_ptree_in_sbi(xd->sbi, xd->tree_type);
       encode_sb(cpi, td, tile_data, tp, mi_row, mi_col, OUTPUT_ENABLED, bsize,
                 pc_tree, xd->sbi->ptree_root[av1_get_sdp_idx(xd->tree_type)],
@@ -2322,7 +2330,7 @@ void av1_rd_use_partition(AV1_COMP *cpi, ThreadData *td, TileDataEnc *tile_data,
       av1_reset_ptree_in_sbi(xd->sbi);
       encode_sb(cpi, td, tile_data, tp, mi_row, mi_col, OUTPUT_ENABLED, bsize,
                 pc_tree, xd->sbi->ptree_root, NULL);
-#endif
+#endif  // CONFIG_SDP
     } else {
       encode_sb(cpi, td, tile_data, tp, mi_row, mi_col, DRY_RUN_NORMAL, bsize,
                 pc_tree, NULL, NULL);
@@ -2352,25 +2360,31 @@ static void encode_b_nonrd(const AV1_COMP *const cpi, TileDataEnc *tile_data,
   assert(!has_second_ref(mbmi));
   av1_update_state(cpi, td, ctx, mi_row, mi_col, bsize, dry_run);
 #if CONFIG_SDP
-  int plane_type = (xd->tree_type == CHROMA_PART);
+  const AV1_COMMON *const cm = &cpi->common;
+  const int num_planes = av1_num_planes(cm);
+  const int plane_start = (xd->tree_type == CHROMA_PART);
+  const int plane_end = (xd->tree_type == LUMA_PART) ? 1 : num_planes;
 #endif
   if (!dry_run) {
 #if CONFIG_SDP
-    x->mbmi_ext_frame->cb_offset[plane_type] = x->cb_offset[plane_type];
-    assert(x->cb_offset[plane_type] <
-           (1 << num_pels_log2_lookup[cpi->common.seq_params.sb_size]));
+    for (int plane = plane_start; plane < plane_end; plane++) {
+      x->mbmi_ext_frame->cb_offset[plane] = x->cb_offset[plane];
+      assert(x->cb_offset[plane] <
+             (1 << num_pels_log2_lookup[cpi->common.seq_params.sb_size]));
+    }
 #else
     memcpy(x->mbmi_ext_frame->cb_offset, x->cb_offset, sizeof(x->cb_offset));
     assert(x->cb_offset[0] <
            (1 << num_pels_log2_lookup[cpi->common.seq_params.sb_size]));
-#endif
+#endif  // CONFIG_SDP
   }
   encode_superblock(cpi, tile_data, td, tp, dry_run, bsize, rate);
   if (!dry_run) {
 #if CONFIG_SDP
-    x->cb_offset[plane_type] += block_size_wide[bsize] * block_size_high[bsize];
+    for (int p = plane_start; p < plane_end; ++p) {
 #else
     for (int p = 0; p < MAX_MB_PLANE; ++p) {
+#endif  // CONFIG_SDP
       if (p == 0) {
         x->cb_offset[p] += block_size_wide[bsize] * block_size_high[bsize];
       } else if (xd->is_chroma_ref) {
@@ -2379,7 +2393,6 @@ static void encode_b_nonrd(const AV1_COMP *const cpi, TileDataEnc *tile_data,
             block_size_wide[bsize_base] * block_size_high[bsize_base];
       }
     }
-#endif  // CONFIG_SDP
     if (tile_data->allow_update_cdf) update_stats(&cpi->common, td);
   }
   // TODO(Ravi/Remya): Move this copy function to a better logical place
@@ -5476,7 +5489,11 @@ BEGIN_PARTITION_SEARCH:
       const int emit_output = multi_pass_mode != SB_DRY_PASS;
       const RUN_TYPE run_type = emit_output ? OUTPUT_ENABLED : DRY_RUN_NORMAL;
 #if CONFIG_SDP
-      x->cb_offset[xd->tree_type == CHROMA_PART] = 0;
+      const int plane_start = (xd->tree_type == CHROMA_PART);
+      const int plane_end = (xd->tree_type == LUMA_PART) ? 1 : num_planes;
+      for (int plane = plane_start; plane < plane_end; plane++) {
+        x->cb_offset[plane] = 0;
+      }
       av1_reset_ptree_in_sbi(xd->sbi, xd->tree_type);
       encode_sb(cpi, td, tile_data, tp, mi_row, mi_col, run_type, bsize,
                 pc_tree, xd->sbi->ptree_root[av1_get_sdp_idx(xd->tree_type)],
@@ -5486,7 +5503,7 @@ BEGIN_PARTITION_SEARCH:
       av1_reset_ptree_in_sbi(xd->sbi);
       encode_sb(cpi, td, tile_data, tp, mi_row, mi_col, run_type, bsize,
                 pc_tree, xd->sbi->ptree_root, NULL);
-#endif
+#endif  // CONFIG_SDP
       // Dealloc the whole PC_TREE after a superblock is done.
       av1_free_pc_tree_recursive(pc_tree, num_planes, 0, 0);
       pc_tree_dealloc = 1;
