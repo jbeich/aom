@@ -1472,6 +1472,9 @@ static AOM_INLINE void decode_block(AV1Decoder *const pbi, ThreadData *const td,
 static PARTITION_TYPE read_partition(const AV1_COMMON *const cm,
                                      MACROBLOCKD *xd, int mi_row, int mi_col,
                                      aom_reader *r, int has_rows, int has_cols,
+#if CONFIG_EXT_RECUR_PARTITIONS
+                                     PARTITION_TREE *ptree_luma,
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
                                      BLOCK_SIZE bsize) {
 #else
 static PARTITION_TYPE read_partition(MACROBLOCKD *xd, int mi_row, int mi_col,
@@ -1519,9 +1522,16 @@ static PARTITION_TYPE read_partition(MACROBLOCKD *xd, int mi_row, int mi_col,
   int parent_block_width = block_size_wide[bsize];
   const CommonModeInfoParams *const mi_params = &cm->mi_params;
   if (xd->tree_type == CHROMA_PART && parent_block_width >= SHARED_PART_SIZE) {
+#if CONFIG_EXT_RECUR_PARTITIONS
+    const int ssx = cm->seq_params.subsampling_x;
+    const int ssy = cm->seq_params.subsampling_y;
+    if (ptree_luma)
+      return sdp_chroma_part_from_luma(bsize, ptree_luma->partition, ssx, ssy);
+#else   // CONFIG_EXT_RECUR_PARTITIONS
     int luma_split_flag = get_luma_split_flag(bsize, mi_params, mi_row, mi_col);
     // if luma blocks uses smaller blocks, then chroma will also split
     if (luma_split_flag > 3) return PARTITION_SPLIT;
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
   }
 #endif
 
@@ -1556,6 +1566,9 @@ static AOM_INLINE void decode_partition(AV1Decoder *const pbi,
                                         ThreadData *const td, int mi_row,
                                         int mi_col, aom_reader *reader,
                                         BLOCK_SIZE bsize, PARTITION_TREE *ptree,
+#if CONFIG_SDP && CONFIG_EXT_RECUR_PARTITIONS
+                                        PARTITION_TREE *ptree_luma,
+#endif  // CONFIG_SDP && CONFIG_EXT_RECUR_PARTITIONS
                                         int parse_decode_flag) {
   assert(bsize < BLOCK_SIZES_ALL);
   AV1_COMMON *const cm = &pbi->common;
@@ -1604,10 +1617,18 @@ static AOM_INLINE void decode_partition(AV1Decoder *const pbi,
       }
     }
 #if CONFIG_SDP
-    partition = !is_partition_point(bsize)
-                    ? PARTITION_NONE
-                    : read_partition(cm, xd, mi_row, mi_col, reader, has_rows,
-                                     has_cols, bsize);
+    partition =
+        !is_partition_point(bsize)
+            ? PARTITION_NONE
+            : read_partition(cm, xd, mi_row, mi_col, reader, has_rows, has_cols,
+#if CONFIG_EXT_RECUR_PARTITIONS
+                             ptree_luma,
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
+                             bsize);
+#if CONFIG_EXT_RECUR_PARTITIONS
+    const int track_ptree_luma =
+        ptree_luma ? (partition == ptree_luma->partition) : 0;
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
 #else
     partition = !is_partition_point(bsize)
                     ? PARTITION_NONE
@@ -1674,12 +1695,19 @@ static AOM_INLINE void decode_partition(AV1Decoder *const pbi,
   block_visit[parse_decode_flag](pbi, td, DEC_BLOCK_STX_ARG(db_r), (db_c),     \
                                  reader, DEC_BLOCK_EPT_ARG(db_subsize), ptree, \
                                  index)
+#if CONFIG_SDP && CONFIG_EXT_RECUR_PARTITIONS
+  decode_partition(pbi, td, DEC_BLOCK_STX_ARG(db_r), (db_c), reader,
+                   (db_subsize), ptree->sub_tree[(index)],
+                   track_ptree_luma ? ptree_luma->sub_tree[index] : NULL,
+                   parse_decode_flag)
+#else  // CONFIG_SDP && CONFIG_EXT_RECUR_PARTITIONS
 #define DEC_PARTITION(db_r, db_c, db_subsize, index)                 \
   decode_partition(pbi, td, DEC_BLOCK_STX_ARG(db_r), (db_c), reader, \
                    (db_subsize), ptree->sub_tree[(index)], parse_decode_flag)
+#endif  // CONFIG_SDP && CONFIG_EXT_RECUR_PARTITIONS
 
 #if !CONFIG_EXT_RECUR_PARTITIONS
-  const BLOCK_SIZE bsize2 = get_partition_subsize(bsize, PARTITION_SPLIT);
+      const BLOCK_SIZE bsize2 = get_partition_subsize(bsize, PARTITION_SPLIT);
 #endif  // !CONFIG_EXT_RECUR_PARTITIONS
 
   switch (partition) {
@@ -1703,12 +1731,6 @@ static AOM_INLINE void decode_partition(AV1Decoder *const pbi,
       DEC_BLOCK(mi_row, mi_col, subsize, 0);
       if (has_cols) DEC_BLOCK(mi_row, mi_col + hbs_w, subsize, 1);
 #endif  // CONFIG_EXT_RECUR_PARTITIONS
-      break;
-    case PARTITION_SPLIT:
-      DEC_PARTITION(mi_row, mi_col, subsize, 0);
-      DEC_PARTITION(mi_row, mi_col + hbs_w, subsize, 1);
-      DEC_PARTITION(mi_row + hbs_h, mi_col, subsize, 2);
-      DEC_PARTITION(mi_row + hbs_h, mi_col + hbs_w, subsize, 3);
       break;
 #if CONFIG_EXT_RECUR_PARTITIONS
     case PARTITION_HORZ_3: {
@@ -1736,6 +1758,12 @@ static AOM_INLINE void decode_partition(AV1Decoder *const pbi,
       break;
     }
 #else
+    case PARTITION_SPLIT:
+      DEC_PARTITION(mi_row, mi_col, subsize, 0);
+      DEC_PARTITION(mi_row, mi_col + hbs_w, subsize, 1);
+      DEC_PARTITION(mi_row + hbs_h, mi_col, subsize, 2);
+      DEC_PARTITION(mi_row + hbs_h, mi_col + hbs_w, subsize, 3);
+      break;
     case PARTITION_HORZ_A:
       DEC_BLOCK(mi_row, mi_col, bsize2, 0);
       DEC_BLOCK(mi_row, mi_col + hbs_w, bsize2, 1);
@@ -1822,6 +1850,9 @@ static AOM_INLINE void decode_partition_sb(AV1Decoder *const pbi,
   }
   decode_partition(pbi, td, mi_row, mi_col, reader, bsize,
                    td->dcb.xd.sbi->ptree_root[av1_get_sdp_idx(xd->tree_type)],
+#if CONFIG_EXT_RECUR_PARTITIONS
+                   NULL,
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
                    parse_decode_flag);
   if (total_loop_num == 2) {
     xd->tree_type = CHROMA_PART;
@@ -1830,6 +1861,9 @@ static AOM_INLINE void decode_partition_sb(AV1Decoder *const pbi,
     }
     decode_partition(pbi, td, mi_row, mi_col, reader, bsize,
                      td->dcb.xd.sbi->ptree_root[av1_get_sdp_idx(xd->tree_type)],
+#if CONFIG_EXT_RECUR_PARTITIONS
+                     td->dcb.xd.sbi->ptree_root[0],
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
                      parse_decode_flag);
     xd->tree_type = SHARED_PART;
   }

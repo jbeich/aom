@@ -12,6 +12,8 @@
 #ifndef AOM_AV1_COMMON_COMMON_DATA_H_
 #define AOM_AV1_COMMON_COMMON_DATA_H_
 
+#include <assert.h>
+
 #include "av1/common/enums.h"
 #include "aom/aom_integer.h"
 #include "aom_dsp/aom_dsp_common.h"
@@ -143,6 +145,33 @@ static const BLOCK_SIZE
     BLOCK_INVALID, BLOCK_INVALID,
   },
 };
+
+#if CONFIG_SDP
+PARTITION_TYPE sdp_chroma_part_from_luma(BLOCK_SIZE bsize,
+                                         PARTITION_TYPE luma_part, int ssx,
+                                         int ssy) {
+  const int bh_chr = block_size_high[bsize] >> ssy;
+  const int bw_chr = block_size_wide[bsize] >> ssx;
+
+  switch (luma_part) {
+    case PARTITION_NONE: return PARTITION_NONE;
+    case PARTITION_HORZ: return (bh_chr < 8) ? PARTITION_NONE : PARTITION_HORZ;
+    case PARTITION_HORZ_3:
+      if (bh_chr >= 16)
+        return PARTITION_HORZ_3;
+      else
+        return (bh_chr < 8) ? PARTITION_NONE : PARTITION_HORZ;
+    case PARTITION_VERT: return (bw_chr < 8) ? PARTITION_NONE : PARTITION_VERT;
+    case PARTITION_VERT_3:
+      if (bw_chr >= 16)
+        return PARTITION_VERT_3;
+      else
+        return (bw_chr < 8) ? PARTITION_NONE : PARTITION_VERT;
+    default: assert(0);
+  }
+  return PARTITION_INVALID;
+}
+#endif  // CONFIG_SDP
 #else  // CONFIG_EXT_RECUR_PARTITIONS
 // A compressed version of the Partition_Subsize table in the spec (9.3.
 // Conversion tables), for square block sizes only.

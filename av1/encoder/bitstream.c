@@ -1813,7 +1813,11 @@ static AOM_INLINE void write_modes_b(AV1_COMP *cpi, const TileInfo *const tile,
 static AOM_INLINE void write_partition(const AV1_COMMON *const cm,
                                        const MACROBLOCKD *const xd, int mi_row,
                                        int mi_col, PARTITION_TYPE p,
-                                       BLOCK_SIZE bsize, aom_writer *w) {
+                                       BLOCK_SIZE bsize,
+#if CONFIG_SDP && CONFIG_EXT_RECUR_PARTITIONS
+                                       PARTITION_TREE *ptree_luma,
+#endif  // CONFIG_SDP && CONFIG_EXT_RECUR_PARTITIONS
+                                       aom_writer *w) {
   if (!is_partition_point(bsize)) return;
 
 #if CONFIG_SDP
@@ -1860,12 +1864,22 @@ static AOM_INLINE void write_partition(const AV1_COMMON *const cm,
   int parent_block_width = block_size_wide[bsize];
   const CommonModeInfoParams *const mi_params = &cm->mi_params;
   if (xd->tree_type == CHROMA_PART && parent_block_width >= SHARED_PART_SIZE) {
+#if CONFIG_EXT_RECUR_PARTITIONS
+    const int ssx = cm->seq_params.subsampling_x;
+    const int ssy = cm->seq_params.subsampling_y;
+    if (ptree_luma) {
+      assert(p ==
+             sdp_chroma_part_from_luma(bsize, ptree_luma->partition, ssx, ssy));
+      return;
+    }
+#else   // CONFIG_EXT_RECUR_PARTITIONS
     int luma_split_flag = get_luma_split_flag(bsize, mi_params, mi_row, mi_col);
     // if luma blocks uses smaller blocks, then chroma will also split
     if (luma_split_flag > 3) {
       assert(p == PARTITION_SPLIT);
       return;
     }
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
   }
 #endif
 
@@ -1905,7 +1919,11 @@ static AOM_INLINE void write_partition(const AV1_COMMON *const cm,
 static AOM_INLINE void write_modes_sb(
     AV1_COMP *const cpi, const TileInfo *const tile, aom_writer *const w,
     const TokenExtra **tok, const TokenExtra *const tok_end,
-    PARTITION_TREE *ptree, int mi_row, int mi_col, BLOCK_SIZE bsize) {
+    PARTITION_TREE *ptree,
+#if CONFIG_SDP && CONFIG_EXT_RECUR_PARTITIONS
+    PARTITION_TREE *ptree_luma,
+#endif  // CONFIG_SDP && CONFIG_EXT_RECUR_PARTITIONS
+    int mi_row, int mi_col, BLOCK_SIZE bsize) {
   const AV1_COMMON *const cm = &cpi->common;
   const CommonModeInfoParams *const mi_params = &cm->mi_params;
   MACROBLOCKD *const xd = &cpi->td.mb.e_mbd;
@@ -1945,16 +1963,26 @@ static AOM_INLINE void write_modes_sb(
   }
 
   write_partition(cm, xd, mi_row, mi_col, partition, bsize, w);
+#if CONFIG_SDP && CONFIG_EXT_RECUR_PARTITIONS
+  const int track_ptree_luma =
+      ptree_luma ? (partition == ptree_luma->partition) : 0;
+#endif  // CONFIG_SDP && CONFIG_EXT_RECUR_PARTITIONS
   switch (partition) {
     case PARTITION_NONE:
       write_modes_b(cpi, tile, w, tok, tok_end, mi_row, mi_col);
       break;
     case PARTITION_HORZ:
 #if CONFIG_EXT_RECUR_PARTITIONS
-      write_modes_sb(cpi, tile, w, tok, tok_end, ptree->sub_tree[0], mi_row,
-                     mi_col, subsize);
+      write_modes_sb(cpi, tile, w, tok, tok_end, ptree->sub_tree[0],
+#if CONFIG_SDP
+                     track_ptree_luma ? ptree_luma->sub_tree[0] : NULL;
+#endif  // CONFIG_SDP
+                     mi_row, mi_col, subsize);
       if (mi_row + hbs_h < mi_params->mi_rows) {
         write_modes_sb(cpi, tile, w, tok, tok_end, ptree->sub_tree[1],
+#if CONFIG_SDP
+                       track_ptree_luma ? ptree_luma->sub_tree[1] : NULL;
+#endif  // CONFIG_SDP
                        mi_row + hbs_h, mi_col, subsize);
       }
 #else   // CONFIG_EXT_RECUR_PARTITIONS
@@ -1965,11 +1993,17 @@ static AOM_INLINE void write_modes_sb(
       break;
     case PARTITION_VERT:
 #if CONFIG_EXT_RECUR_PARTITIONS
-      write_modes_sb(cpi, tile, w, tok, tok_end, ptree->sub_tree[0], mi_row,
-                     mi_col, subsize);
+      write_modes_sb(cpi, tile, w, tok, tok_end, ptree->sub_tree[0],
+#if CONFIG_SDP
+                     track_ptree_luma ? ptree_luma->sub_tree[0] : NULL;
+#endif  // CONFIG_SDP
+                     mi_row, mi_col, subsize);
       if (mi_col + hbs_w < mi_params->mi_cols) {
-        write_modes_sb(cpi, tile, w, tok, tok_end, ptree->sub_tree[1], mi_row,
-                       mi_col + hbs_w, subsize);
+        write_modes_sb(cpi, tile, w, tok, tok_end, ptree->sub_tree[1],
+#if CONFIG_SDP
+                       track_ptree_luma ? ptree_luma->sub_tree[1] : NULL;
+#endif  // CONFIG_SDP
+                       mi_row, mi_col + hbs_w, subsize);
       }
 #else  // CONFIG_EXT_RECUR_PARTITIONS
       write_modes_b(cpi, tile, w, tok, tok_end, mi_row, mi_col);
@@ -1977,6 +2011,48 @@ static AOM_INLINE void write_modes_sb(
         write_modes_b(cpi, tile, w, tok, tok_end, mi_row, mi_col + hbs_w);
 #endif
       break;
+#if CONFIG_EXT_RECUR_PARTITIONS
+    case PARTITION_HORZ_3:
+      write_modes_sb(cpi, tile, w, tok, tok_end, ptree->sub_tree[0],
+#if CONFIG_SDP
+                     track_ptree_luma ? ptree_luma->sub_tree[0] : NULL;
+#endif  // CONFIG_SDP
+                     mi_row, mi_col, subsize);
+      if (mi_row + qbs_h >= mi_params->mi_rows) break;
+      write_modes_sb(cpi, tile, w, tok, tok_end, ptree->sub_tree[1],
+#if CONFIG_SDP
+                     track_ptree_luma ? ptree_luma->sub_tree[1] : NULL;
+#endif  // CONFIG_SDP
+                     mi_row + qbs_h, mi_col,
+                     get_partition_subsize(bsize, PARTITION_HORZ));
+      if (mi_row + 3 * qbs_h >= mi_params->mi_rows) break;
+      write_modes_sb(cpi, tile, w, tok, tok_end, ptree->sub_tree[2],
+#if CONFIG_SDP
+                     track_ptree_luma ? ptree_luma->sub_tree[2] : NULL;
+#endif  // CONFIG_SDP
+                     mi_row + 3 * qbs_h, mi_col, subsize);
+      break;
+    case PARTITION_VERT_3:
+      write_modes_sb(cpi, tile, w, tok, tok_end, ptree->sub_tree[0],
+#if CONFIG_SDP
+                     track_ptree_luma ? ptree_luma->sub_tree[0] : NULL;
+#endif  // CONFIG_SDP
+                     mi_row, mi_col, subsize);
+      if (mi_col + qbs_w >= mi_params->mi_cols) break;
+      write_modes_sb(cpi, tile, w, tok, tok_end, ptree->sub_tree[1],
+#if CONFIG_SDP
+                     track_ptree_luma ? ptree_luma->sub_tree[1] : NULL;
+#endif  // CONFIG_SDP
+                     mi_row, mi_col + qbs_w,
+                     get_partition_subsize(bsize, PARTITION_VERT));
+      if (mi_col + 3 * qbs_w >= mi_params->mi_cols) break;
+      write_modes_sb(cpi, tile, w, tok, tok_end, ptree->sub_tree[2],
+#if CONFIG_SDP
+                     track_ptree_luma ? ptree_luma->sub_tree[2] : NULL;
+#endif  // CONFIG_SDP
+                     mi_row, mi_col + 3 * qbs_w, subsize);
+      break;
+#else
     case PARTITION_SPLIT:
       write_modes_sb(cpi, tile, w, tok, tok_end, ptree->sub_tree[0], mi_row,
                      mi_col, subsize);
@@ -1987,30 +2063,6 @@ static AOM_INLINE void write_modes_sb(
       write_modes_sb(cpi, tile, w, tok, tok_end, ptree->sub_tree[3],
                      mi_row + hbs_h, mi_col + hbs_w, subsize);
       break;
-#if CONFIG_EXT_RECUR_PARTITIONS
-    case PARTITION_HORZ_3:
-      write_modes_sb(cpi, tile, w, tok, tok_end, ptree->sub_tree[0], mi_row,
-                     mi_col, subsize);
-      if (mi_row + qbs_h >= mi_params->mi_rows) break;
-      write_modes_sb(cpi, tile, w, tok, tok_end, ptree->sub_tree[1],
-                     mi_row + qbs_h, mi_col,
-                     get_partition_subsize(bsize, PARTITION_HORZ));
-      if (mi_row + 3 * qbs_h >= mi_params->mi_rows) break;
-      write_modes_sb(cpi, tile, w, tok, tok_end, ptree->sub_tree[2],
-                     mi_row + 3 * qbs_h, mi_col, subsize);
-      break;
-    case PARTITION_VERT_3:
-      write_modes_sb(cpi, tile, w, tok, tok_end, ptree->sub_tree[0], mi_row,
-                     mi_col, subsize);
-      if (mi_col + qbs_w >= mi_params->mi_cols) break;
-      write_modes_sb(cpi, tile, w, tok, tok_end, ptree->sub_tree[1], mi_row,
-                     mi_col + qbs_w,
-                     get_partition_subsize(bsize, PARTITION_VERT));
-      if (mi_col + 3 * qbs_w >= mi_params->mi_cols) break;
-      write_modes_sb(cpi, tile, w, tok, tok_end, ptree->sub_tree[2], mi_row,
-                     mi_col + 3 * qbs_w, subsize);
-      break;
-#else
     case PARTITION_HORZ_A:
       write_modes_b(cpi, tile, w, tok, tok_end, mi_row, mi_col);
       write_modes_b(cpi, tile, w, tok, tok_end, mi_row, mi_col + hbs_w);
@@ -2100,11 +2152,17 @@ static AOM_INLINE void write_modes(AV1_COMP *const cpi,
       xd->tree_type = (total_loop_num == 1 ? SHARED_PART : LUMA_PART);
       write_modes_sb(cpi, tile, w, &tok, tok_end,
                      xd->sbi->ptree_root[av1_get_sdp_idx(xd->tree_type)],
+#if CONFIG_EXT_RECUR_PARTITIONS
+                     NULL,
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
                      mi_row, mi_col, cm->seq_params.sb_size);
       if (total_loop_num == 2) {
         xd->tree_type = CHROMA_PART;
         write_modes_sb(cpi, tile, w, &tok, tok_end,
                        xd->sbi->ptree_root[av1_get_sdp_idx(xd->tree_type)],
+#if CONFIG_EXT_RECUR_PARTITIONS
+                       xd->sbi->ptree_root[0],
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
                        mi_row, mi_col, cm->seq_params.sb_size);
         xd->tree_type = SHARED_PART;
       }
