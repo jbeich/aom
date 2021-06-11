@@ -772,9 +772,13 @@ static AOM_INLINE void encode_rd_sb(AV1_COMP *cpi, ThreadData *td,
 #endif
         PC_TREE *const pc_root = av1_alloc_pc_tree_node(
             mi_row, mi_col, sb_size, NULL, PARTITION_NONE, 0, 1, ss_x, ss_y);
-        av1_rd_pick_partition(cpi, td, tile_data, tp, mi_row, mi_col, sb_size,
-                              &dummy_rdc, dummy_rdc, pc_root, sms_root, NULL,
-                              SB_SINGLE_PASS, NULL);
+        av1_rd_pick_partition(
+            cpi, td, tile_data, tp, mi_row, mi_col, sb_size, &dummy_rdc,
+            dummy_rdc, pc_root,
+#if CONFIG_SDP && CONFIG_EXT_RECUR_PARTITIONS
+            xd->tree_type == CHROMA_PART ? xd->sbi->ptree_root[0] : NULL,
+#endif  // CONFIG_SDP && CONFIG_EXT_RECUR_PARTITIONS
+            sms_root, NULL, SB_SINGLE_PASS, NULL);
 #if CONFIG_SDP
       }
       xd->tree_type = SHARED_PART;
@@ -793,9 +797,13 @@ static AOM_INLINE void encode_rd_sb(AV1_COMP *cpi, ThreadData *td,
 #endif
         PC_TREE *const pc_root_p0 = av1_alloc_pc_tree_node(
             mi_row, mi_col, sb_size, NULL, PARTITION_NONE, 0, 1, ss_x, ss_y);
-        av1_rd_pick_partition(cpi, td, tile_data, tp, mi_row, mi_col, sb_size,
-                              &dummy_rdc, dummy_rdc, pc_root_p0, sms_root, NULL,
-                              SB_DRY_PASS, NULL);
+        av1_rd_pick_partition(
+            cpi, td, tile_data, tp, mi_row, mi_col, sb_size, &dummy_rdc,
+            dummy_rdc, pc_root_p0,
+#if CONFIG_SDP && CONFIG_EXT_RECUR_PARTITIONS
+            xd->tree_type == CHROMA_PART ? xd->sbi->ptree_root[0] : NULL,
+#endif  // CONFIG_SDP && CONFIG_EXT_RECUR_PARTITIONS
+            sms_root, NULL, SB_DRY_PASS, NULL);
 #if CONFIG_SDP
       }
       xd->tree_type = SHARED_PART;
@@ -819,9 +827,13 @@ static AOM_INLINE void encode_rd_sb(AV1_COMP *cpi, ThreadData *td,
 
         PC_TREE *const pc_root_p1 = av1_alloc_pc_tree_node(
             mi_row, mi_col, sb_size, NULL, PARTITION_NONE, 0, 1, ss_x, ss_y);
-        av1_rd_pick_partition(cpi, td, tile_data, tp, mi_row, mi_col, sb_size,
-                              &dummy_rdc, dummy_rdc, pc_root_p1, sms_root, NULL,
-                              SB_WET_PASS, NULL);
+        av1_rd_pick_partition(
+            cpi, td, tile_data, tp, mi_row, mi_col, sb_size, &dummy_rdc,
+            dummy_rdc, pc_root_p1,
+#if CONFIG_SDP && CONFIG_EXT_RECUR_PARTITIONS
+            xd->tree_type == CHROMA_PART ? xd->sbi->ptree_root[0] : NULL,
+#endif  // CONFIG_SDP && CONFIG_EXT_RECUR_PARTITIONS
+            sms_root, NULL, SB_WET_PASS, NULL);
 #if CONFIG_SDP
       }
       xd->tree_type = SHARED_PART;
