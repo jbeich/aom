@@ -479,18 +479,15 @@ int64_t av1_rd_pick_intra_sbuv_mode(const AV1_COMP *const cpi, MACROBLOCK *x,
   if (xd->tree_type == SHARED_PART) {
 #endif
     if (xd->cfl.store_y) {
-#if CONFIG_EXT_RECUR_PARTITIONS
-      av1_encode_intra_block_plane(cpi, x, AOM_PLANE_Y, DRY_RUN_NORMAL,
+#if CONFIG_SDP
+      av1_encode_intra_block_plane(cpi, x, mbmi->sb_type[PLANE_TYPE_Y],
+                                   AOM_PLANE_Y, DRY_RUN_NORMAL,
                                    cpi->optimize_seg_arr[mbmi->segment_id]);
-#elif CONFIG_SDP
-    av1_encode_intra_block_plane(cpi, x, mbmi->sb_type[PLANE_TYPE_Y],
-                                 AOM_PLANE_Y, DRY_RUN_NORMAL,
-                                 cpi->optimize_seg_arr[mbmi->segment_id]);
-#else  // !CONFIG_EXT_RECUR_PARTITIONS && !CONFIG_SDP
+#else
     av1_encode_intra_block_plane(cpi, x, mbmi->sb_type, AOM_PLANE_Y,
                                  DRY_RUN_NORMAL,
                                  cpi->optimize_seg_arr[mbmi->segment_id]);
-#endif
+#endif  // CONFIG_SDP
       xd->cfl.store_y = 0;
     }
 #if CONFIG_SDP

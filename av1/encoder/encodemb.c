@@ -835,15 +835,9 @@ void av1_encode_block_intra(int plane, int block, int blk_row, int blk_col,
   }
 }
 
-#if CONFIG_EXT_RECUR_PARTITIONS
-void av1_encode_intra_block_plane(const struct AV1_COMP *cpi, MACROBLOCK *x,
-                                  int plane, RUN_TYPE dry_run,
-                                  TRELLIS_OPT_TYPE enable_optimize_b) {
-#else
 void av1_encode_intra_block_plane(const struct AV1_COMP *cpi, MACROBLOCK *x,
                                   BLOCK_SIZE bsize, int plane, RUN_TYPE dry_run,
                                   TRELLIS_OPT_TYPE enable_optimize_b) {
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
   const MACROBLOCKD *const xd = &x->e_mbd;
   if (plane && !xd->is_chroma_ref) return;
 
@@ -865,8 +859,8 @@ void av1_encode_intra_block_plane(const struct AV1_COMP *cpi, MACROBLOCK *x,
       get_mb_plane_block_size(xd, xd->mi[0], plane, ss_x, ss_y);
 #if CONFIG_SDP
   assert(plane_bsize == get_plane_block_size(bsize, ss_x, ss_y));
-  (void)bsize;
 #endif  // CONFIG_SDP
+  (void)bsize;
 #else
   const BLOCK_SIZE bsize_base =
       plane ? xd->mi[0]->chroma_ref_info.bsize_base : bsize;

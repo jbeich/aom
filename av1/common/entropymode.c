@@ -172,7 +172,64 @@ static const aom_cdf_prob
         { AOM_CDF14(3144, 5087, 7382, 7504, 7593, 7690, 7801, 8064, 8232, 9248,
                     9875, 10521, 29048) } }
     };
-#if CONFIG_SDP
+#if CONFIG_EXT_RECUR_PARTITIONS && CONFIG_SDP
+static const aom_cdf_prob
+    default_partition_cdf[PARTITION_STRUCTURE_NUM][PARTITION_CONTEXTS][CDF_SIZE(
+        EXT_PARTITION_TYPES)] = { {
+                                      // 8x8
+                                      { AOM_CDF3(22187, 28914) },
+                                      { AOM_CDF3(17354, 25544) },
+                                      { AOM_CDF3(16287, 28824) },
+                                      { AOM_CDF3(15189, 27217) },
+                                      // 16x16
+                                      { AOM_CDF5(14665, 22357, 28960, 30645) },
+                                      { AOM_CDF5(7804, 13703, 27420, 29025) },
+                                      { AOM_CDF5(7508, 23180, 28044, 30882) },
+                                      { AOM_CDF5(5058, 16122, 25275, 28359) },
+                                      // 32x32
+                                      { AOM_CDF5(11795, 19886, 27120, 29401) },
+                                      { AOM_CDF5(5127, 12682, 26374, 28387) },
+                                      { AOM_CDF5(5522, 19614, 27318, 30668) },
+                                      { AOM_CDF5(3450, 12856, 24163, 28493) },
+                                      // 64x64
+                                      { AOM_CDF5(21562, 26118, 30872, 31711) },
+                                      { AOM_CDF5(5489, 14515, 28365, 29969) },
+                                      { AOM_CDF5(5873, 19195, 28209, 31603) },
+                                      { AOM_CDF5(1674, 15579, 28805, 31560) },
+                                      // 128x128
+                                      { AOM_CDF3(25710, 28640) },
+                                      { AOM_CDF3(7561, 14721) },
+                                      { AOM_CDF3(9603, 21021) },
+                                      { AOM_CDF3(1736, 12989) },
+                                  },
+                                  {
+                                      // 8x8
+                                      { AOM_CDF3(22187, 28914) },
+                                      { AOM_CDF3(17354, 25544) },
+                                      { AOM_CDF3(16287, 28824) },
+                                      { AOM_CDF3(15189, 27217) },
+                                      // 16x16
+                                      { AOM_CDF5(14665, 22357, 28960, 30645) },
+                                      { AOM_CDF5(7804, 13703, 27420, 29025) },
+                                      { AOM_CDF5(7508, 23180, 28044, 30882) },
+                                      { AOM_CDF5(5058, 16122, 25275, 28359) },
+                                      // 32x32
+                                      { AOM_CDF5(11795, 19886, 27120, 29401) },
+                                      { AOM_CDF5(5127, 12682, 26374, 28387) },
+                                      { AOM_CDF5(5522, 19614, 27318, 30668) },
+                                      { AOM_CDF5(3450, 12856, 24163, 28493) },
+                                      // 64x64
+                                      { AOM_CDF5(21562, 26118, 30872, 31711) },
+                                      { AOM_CDF5(5489, 14515, 28365, 29969) },
+                                      { AOM_CDF5(5873, 19195, 28209, 31603) },
+                                      { AOM_CDF5(1674, 15579, 28805, 31560) },
+                                      // 128x128
+                                      { AOM_CDF3(25710, 28640) },
+                                      { AOM_CDF3(7561, 14721) },
+                                      { AOM_CDF3(9603, 21021) },
+                                      { AOM_CDF3(1736, 12989) },
+                                  } };
+#elif CONFIG_SDP
 static const aom_cdf_prob
     default_partition_cdf[PARTITION_STRUCTURE_NUM][PARTITION_CONTEXTS][CDF_SIZE(
         EXT_PARTITION_TYPES)] = {

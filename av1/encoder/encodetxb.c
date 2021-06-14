@@ -1536,15 +1536,9 @@ void av1_update_and_record_txb_context(int plane, int block, int blk_row,
                            blk_col, blk_row);
 }
 
-#if CONFIG_EXT_RECUR_PARTITIONS
-void av1_update_intra_mb_txb_context(const AV1_COMP *cpi, ThreadData *td,
-                                     RUN_TYPE dry_run,
-                                     uint8_t allow_update_cdf) {
-#else
 void av1_update_intra_mb_txb_context(const AV1_COMP *cpi, ThreadData *td,
                                      RUN_TYPE dry_run, BLOCK_SIZE bsize,
                                      uint8_t allow_update_cdf) {
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
   const AV1_COMMON *const cm = &cpi->common;
   const int num_planes = av1_num_planes(cm);
   MACROBLOCK *const x = &td->mb;
@@ -1556,14 +1550,10 @@ void av1_update_intra_mb_txb_context(const AV1_COMP *cpi, ThreadData *td,
 #else
   if (mbmi->skip_txfm) {
 #endif  // CONFIG_SDP
-#if CONFIG_EXT_RECUR_PARTITIONS
 #if CONFIG_SDP
     assert(bsize == mbmi->sb_type[av1_get_sdp_idx(xd->tree_type)]);
-#endif  // CONFIG_SDP
-    av1_reset_entropy_context(xd, num_planes);
-#else
-    av1_reset_entropy_context(xd, bsize, num_planes);
 #endif  // CONFIG_EXT_RECUR_PARTITIONS
+    av1_reset_entropy_context(xd, bsize, num_planes);
     return;
   }
 #if CONFIG_SDP

@@ -2096,8 +2096,13 @@ static INLINE PARTITION_TYPE get_partition(const AV1_COMMON *const cm,
       // it's PARTITION_SPLIT.
 #if CONFIG_EXT_RECUR_PARTITIONS
       if (sswide * 2 != bwide || sshigh * 2 != bhigh) {
+#if CONFIG_SDP
+        if (mi_size_wide[mbmi_below->sb_type[plane_type]] < bwide &&
+            mi_size_high[mbmi_right->sb_type[plane_type]] < bhigh)
+#else
         if (mi_size_wide[mbmi_below->sb_type] < bwide &&
             mi_size_high[mbmi_right->sb_type] < bhigh)
+#endif  // CONFIG_SDP
           return PARTITION_SPLIT;
       }
 #else  // CONFIG_EXT_RECUR_PARTITIONS

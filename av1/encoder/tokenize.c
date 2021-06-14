@@ -194,16 +194,10 @@ static void tokenize_vartx(ThreadData *td, TX_SIZE tx_size,
   }
 }
 
-#if CONFIG_EXT_RECUR_PARTITIONS
-void av1_tokenize_sb_tx_size(const AV1_COMP *cpi, ThreadData *td,
-                             RUN_TYPE dry_run, int *rate,
-                             uint8_t allow_update_cdf) {
-#else
 void av1_tokenize_sb_vartx(const AV1_COMP *cpi, ThreadData *td,
                            RUN_TYPE dry_run, BLOCK_SIZE bsize, int *rate,
                            uint8_t allow_update_cdf) {
   assert(bsize < BLOCK_SIZES_ALL);
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
   const AV1_COMMON *const cm = &cpi->common;
   MACROBLOCK *const x = &td->mb;
   MACROBLOCKD *const xd = &x->e_mbd;
@@ -221,14 +215,10 @@ void av1_tokenize_sb_vartx(const AV1_COMP *cpi, ThreadData *td,
   assert(mbmi->sb_type < BLOCK_SIZES_ALL);
   if (mbmi->skip_txfm) {
 #endif
-#if CONFIG_EXT_RECUR_PARTITIONS
 #if CONFIG_SDP
     assert(bsize == mbmi->sb_type[av1_get_sdp_idx(xd->tree_type)]);
 #endif  // CONFIG_SDP
-    av1_reset_entropy_context(xd, num_planes);
-#else
     av1_reset_entropy_context(xd, bsize, num_planes);
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
     return;
   }
 #if CONFIG_SDP
@@ -248,9 +238,9 @@ void av1_tokenize_sb_vartx(const AV1_COMP *cpi, ThreadData *td,
 #if CONFIG_SDP
     const BLOCK_SIZE bsize_base =
         plane ? mbmi->chroma_ref_info.bsize_base : bsize;
-    (void)bsize_base;
     assert(plane_bsize == get_plane_block_size(bsize_base, ss_x, ss_y));
-#endif  // CONFIG_DP
+    (void)bsize_base;
+#endif  // CONFIG_SDP
 #else
     const BLOCK_SIZE bsize_base =
         plane ? mbmi->chroma_ref_info.bsize_base : bsize;

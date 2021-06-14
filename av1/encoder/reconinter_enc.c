@@ -313,17 +313,9 @@ void av1_build_obmc_inter_predictors_sb(const AV1_COMMON *cm, MACROBLOCKD *xd) {
                                   dst_stride2);
 }
 
-#if CONFIG_EXT_RECUR_PARTITIONS
-void av1_build_inter_predictors_for_planes_single_buf(MACROBLOCKD *xd,
-                                                      int plane_from,
-                                                      int plane_to, int ref,
-                                                      uint8_t *ext_dst[3],
-                                                      int ext_dst_stride[3]) {
-#else
 void av1_build_inter_predictors_for_planes_single_buf(
     MACROBLOCKD *xd, BLOCK_SIZE bsize, int plane_from, int plane_to, int ref,
     uint8_t *ext_dst[3], int ext_dst_stride[3]) {
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
   const MB_MODE_INFO *mi = xd->mi[0];
   const int mi_row = xd->mi_row;
   const int mi_col = xd->mi_col;
@@ -342,8 +334,8 @@ void av1_build_inter_predictors_for_planes_single_buf(
 #if CONFIG_SDP
     assert(plane_bsize ==
            get_plane_block_size(bsize, pd->subsampling_x, pd->subsampling_y));
-    (void)bsize;
 #endif  // CONFIG_SDP
+    (void)bsize;
 #else
     const BLOCK_SIZE plane_bsize =
         get_plane_block_size(bsize, pd->subsampling_x, pd->subsampling_y);
@@ -464,18 +456,12 @@ static void build_wedge_inter_predictor_from_buf(
   }
 }
 
-#if CONFIG_EXT_RECUR_PARTITIONS
-void av1_build_wedge_inter_predictor_from_buf(
-    MACROBLOCKD *xd, int plane_from, int plane_to, uint8_t *ext_dst0[3],
-    int ext_dst_stride0[3], uint8_t *ext_dst1[3], int ext_dst_stride1[3]) {
-#else
 void av1_build_wedge_inter_predictor_from_buf(MACROBLOCKD *xd, BLOCK_SIZE bsize,
                                               int plane_from, int plane_to,
                                               uint8_t *ext_dst0[3],
                                               int ext_dst_stride0[3],
                                               uint8_t *ext_dst1[3],
                                               int ext_dst_stride1[3]) {
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
   int plane;
   for (plane = plane_from; plane <= plane_to; ++plane) {
 #if CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP
@@ -486,8 +472,8 @@ void av1_build_wedge_inter_predictor_from_buf(MACROBLOCKD *xd, BLOCK_SIZE bsize,
     assert(plane_bsize == get_plane_block_size(bsize,
                                                xd->plane[plane].subsampling_x,
                                                xd->plane[plane].subsampling_y));
-    (void)bsize;
 #endif  // CONFIG_SDP
+    (void)bsize;
 #else
     const BLOCK_SIZE plane_bsize = get_plane_block_size(
         bsize, xd->plane[plane].subsampling_x, xd->plane[plane].subsampling_y);

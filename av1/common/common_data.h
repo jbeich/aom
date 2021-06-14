@@ -147,7 +147,7 @@ static const BLOCK_SIZE
 };
 
 #if CONFIG_SDP
-PARTITION_TYPE sdp_chroma_part_from_luma(BLOCK_SIZE bsize,
+static AOM_INLINE PARTITION_TYPE sdp_chroma_part_from_luma(BLOCK_SIZE bsize,
                                          PARTITION_TYPE luma_part, int ssx,
                                          int ssy) {
   const int bh_chr = block_size_high[bsize] >> ssy;

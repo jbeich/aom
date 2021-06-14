@@ -1794,12 +1794,8 @@ static INLINE TX_SIZE av1_get_tx_size(int plane, const MACROBLOCKD *xd) {
 #endif
 }
 
-#if CONFIG_EXT_RECUR_PARTITIONS
-void av1_reset_entropy_context(MACROBLOCKD *xd, const int num_planes);
-#else
 void av1_reset_entropy_context(MACROBLOCKD *xd, BLOCK_SIZE bsize,
                                const int num_planes);
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
 
 void av1_reset_loop_filter_delta(MACROBLOCKD *xd, int num_planes);
 

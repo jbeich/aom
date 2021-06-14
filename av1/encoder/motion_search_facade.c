@@ -861,7 +861,11 @@ int_mv av1_simple_motion_search_ext(AV1_COMP *const cpi,
   // set_offsets_for_motion_search(cpi, x, mi_row, mi_col, bsize);
 
   MB_MODE_INFO *mbmi = xd->mi[0];
+#if CONFIG_SDP
+  mbmi->sb_type[0] = mbmi->sb_type[1] = bsize;
+#else
   mbmi->sb_type = bsize;
+#endif  // CONFIG_SDP
   mbmi->ref_frame[0] = ref;
   mbmi->ref_frame[1] = NONE_FRAME;
   mbmi->motion_mode = SIMPLE_TRANSLATION;

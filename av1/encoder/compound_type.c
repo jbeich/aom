@@ -426,17 +426,10 @@ static AOM_INLINE void get_inter_predictors_masked_compound(
   const int bw = block_size_wide[bsize];
   const int bh = block_size_high[bsize];
   // get inter predictors to use for masked compound modes
-#if CONFIG_EXT_RECUR_PARTITIONS
-  av1_build_inter_predictors_for_planes_single_buf(xd, 0, 0, 0, preds0,
-                                                   strides);
-  av1_build_inter_predictors_for_planes_single_buf(xd, 0, 0, 1, preds1,
-                                                   strides);
-#else
   av1_build_inter_predictors_for_planes_single_buf(xd, bsize, 0, 0, 0, preds0,
                                                    strides);
   av1_build_inter_predictors_for_planes_single_buf(xd, bsize, 0, 0, 1, preds1,
                                                    strides);
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
   const struct buf_2d *const src = &x->plane[0].src;
 
   if (is_cur_buf_hbd(xd)) {
@@ -1245,33 +1238,18 @@ static int64_t masked_compound_type_rd(
         mbmi->mv[0].as_int = cur_mv[0].as_int;
         mbmi->mv[1].as_int = cur_mv[1].as_int;
         *out_rate_mv = rate_mv;
-#if CONFIG_EXT_RECUR_PARTITIONS
-        av1_build_wedge_inter_predictor_from_buf(xd, 0, 0, preds0, strides,
-                                                 preds1, strides);
-#else
         av1_build_wedge_inter_predictor_from_buf(xd, bsize, 0, 0, preds0,
                                                  strides, preds1, strides);
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
       } else {
         // build the final prediciton using the updated mv
-#if CONFIG_EXT_RECUR_PARTITIONS
-        av1_build_wedge_inter_predictor_from_buf(xd, 0, 0, tmp_preds0, strides,
-                                                 tmp_preds1, strides);
-#else
         av1_build_wedge_inter_predictor_from_buf(xd, bsize, 0, 0, tmp_preds0,
                                                  strides, tmp_preds1, strides);
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
       }
       release_compound_type_rd_buffers(&tmp_buf);
     } else {
       *out_rate_mv = rate_mv;
-#if CONFIG_EXT_RECUR_PARTITIONS
-      av1_build_wedge_inter_predictor_from_buf(xd, 0, 0, preds0, strides,
-                                               preds1, strides);
-#else
       av1_build_wedge_inter_predictor_from_buf(xd, bsize, 0, 0, preds0, strides,
                                                preds1, strides);
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
     }
     // Get the RD cost from model RD
     model_rd_sb_fn[MODELRD_TYPE_MASKED_COMPOUND](
@@ -1285,13 +1263,8 @@ static int64_t masked_compound_type_rd(
         mbmi->mv[0].as_int = cur_mv[0].as_int;
         mbmi->mv[1].as_int = cur_mv[1].as_int;
         *out_rate_mv = rate_mv;
-#if CONFIG_EXT_RECUR_PARTITIONS
-        av1_build_wedge_inter_predictor_from_buf(xd, 0, 0, preds0, strides,
-                                                 preds1, strides);
-#else
         av1_build_wedge_inter_predictor_from_buf(xd, bsize, 0, 0, preds0,
                                                  strides, preds1, strides);
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
         *comp_model_rd_cur = best_rd_cur;
       }
     }

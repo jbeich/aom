@@ -405,8 +405,13 @@ static AOM_INLINE void collect_mv_stats_tile(MV_STATS *mv_stats,
     for (int mi_col = mi_col_start; mi_col < mi_col_end; mi_col += sb_size_mi) {
 #if CONFIG_EXT_RECUR_PARTITIONS
       const SB_INFO *sb_info = av1_get_sb_info(cm, mi_row, mi_col);
+#if CONFIG_SDP
+      collect_mv_stats_sb(mv_stats, cpi, mi_row, mi_col, sb_size,
+                          sb_info->ptree_root[0]);
+#else
       collect_mv_stats_sb(mv_stats, cpi, mi_row, mi_col, sb_size,
                           sb_info->ptree_root);
+#endif  // CONFIG_SDP
 #else
       collect_mv_stats_sb(mv_stats, cpi, mi_row, mi_col, sb_size);
 #endif  // EXT_RECUR_PARTITIONS

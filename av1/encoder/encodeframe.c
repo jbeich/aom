@@ -632,8 +632,10 @@ static AOM_INLINE void encode_rd_sb(AV1_COMP *cpi, ThreadData *td,
        cm->seq_params.enable_sdp)
           ? 2
           : 1;
+#endif  // CONFIG_SDP
+#if CONFIG_SDP || CONFIG_EXT_RECUR_PARTITIONS
   MACROBLOCKD *const xd = &x->e_mbd;
-#endif
+#endif  // CONFIG_SDP || CONFIG_EXT_RECUR_PARTITIONS
 
 #if CONFIG_EXT_RECUR_PARTITIONS
   x->sms_bufs = td->sms_bufs;
@@ -682,20 +684,28 @@ static AOM_INLINE void encode_rd_sb(AV1_COMP *cpi, ThreadData *td,
                         mi_col, 1);
 #endif
 #if CONFIG_EXT_RECUR_PARTITIONS
-      MACROBLOCKD *const xd = &x->e_mbd;
+#if CONFIG_SDP
+      av1_reset_ptree_in_sbi(xd->sbi, xd->tree_type);
+      av1_build_partition_tree_fixed_partitioning(
+          cm, mi_row, mi_col, bsize,
+          xd->sbi->ptree_root[av1_get_sdp_idx(xd->tree_type)]);
+#else
       av1_reset_ptree_in_sbi(xd->sbi);
       av1_build_partition_tree_fixed_partitioning(cm, mi_row, mi_col, bsize,
                                                   xd->sbi->ptree_root);
+#endif  // CONFIG_SDP
 #endif  // CONFIG_EXT_RECUR_PARTITIONS
       PC_TREE *const pc_root = av1_alloc_pc_tree_node(
           mi_row, mi_col, sb_size, NULL, PARTITION_NONE, 0, 1, ss_x, ss_y);
       av1_rd_use_partition(cpi, td, tile_data, mi, tp, mi_row, mi_col, sb_size,
                            &dummy_rate, &dummy_dist, 1,
-#if CONFIG_EXT_RECUR_PARTITIONS
-                           xd->sbi->ptree_root,
-#else   // CONFIG_EXT_RECUR_PARTITIONS
+#if CONFIG_EXT_RECUR_PARTITIONS && CONFIG_SDP
+                           xd->sbi->ptree_root[av1_get_sdp_idx(xd->tree_type)],
+#elif CONFIG_EXT_RECUR_PARTITIONS
+                         xd->sbi->ptree_root,
+#else   // !CONFIG_EXT_RECUR_PARTITIONS
                          NULL,
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
+#endif  // CONFIG_EXT_RECUR_PARTITIONS && CONFIG_SDP
                            pc_root);
       av1_free_pc_tree_recursive(pc_root, num_planes, 0, 0);
 #if CONFIG_SDP
@@ -720,18 +730,26 @@ static AOM_INLINE void encode_rd_sb(AV1_COMP *cpi, ThreadData *td,
       PC_TREE *const pc_root = av1_alloc_pc_tree_node(
           mi_row, mi_col, sb_size, NULL, PARTITION_NONE, 0, 1, ss_x, ss_y);
 #if CONFIG_EXT_RECUR_PARTITIONS
-      MACROBLOCKD *const xd = &x->e_mbd;
+#if CONFIG_SDP
+      av1_reset_ptree_in_sbi(xd->sbi, xd->tree_type);
+      av1_build_partition_tree_fixed_partitioning(
+          cm, mi_row, mi_col, bsize,
+          xd->sbi->ptree_root[av1_get_sdp_idx(xd->tree_type)]);
+#else
       av1_reset_ptree_in_sbi(xd->sbi);
       av1_build_partition_tree_fixed_partitioning(cm, mi_row, mi_col, bsize,
                                                   xd->sbi->ptree_root);
+#endif  // CONFIG_SDP
 #endif  // CONFIG_EXT_RECUR_PARTITIONS
       av1_rd_use_partition(cpi, td, tile_data, mi, tp, mi_row, mi_col, sb_size,
                            &dummy_rate, &dummy_dist, 1,
-#if CONFIG_EXT_RECUR_PARTITIONS
-                           xd->sbi->ptree_root,
-#else   // CONFIG_EXT_RECUR_PARTITIONS
+#if CONFIG_EXT_RECUR_PARTITIONS && CONFIG_SDP
+                           xd->sbi->ptree_root[av1_get_sdp_idx(xd->tree_type)],
+#elif CONFIG_EXT_RECUR_PARTITIONS
+                         xd->sbi->ptree_root,
+#else   // !CONFIG_EXT_RECUR_PARTITIONS
                          NULL,
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
+#endif  // CONFIG_EXT_RECUR_PARTITIONS && CONFIG_SDP
                            pc_root);
       av1_free_pc_tree_recursive(pc_root, num_planes, 0, 0);
 #if CONFIG_SDP
