@@ -415,16 +415,22 @@ static AOM_INLINE void decode_mbmi_block(AV1Decoder *const pbi,
   xd->mi[0]->partition = partition;
   av1_read_mode_info(pbi, dcb, r, x_mis, y_mis);
 
-  const struct macroblockd_plane *const pd_u = &xd->plane[1];
-  const BLOCK_SIZE chroma_bsize_base = xd->mi[0]->chroma_ref_info.bsize_base;
-  assert(chroma_bsize_base < BLOCK_SIZES_ALL);
-  if (get_plane_block_size(chroma_bsize_base, pd_u->subsampling_x,
-                           pd_u->subsampling_y) == BLOCK_INVALID) {
-    aom_internal_error(xd->error_info, AOM_CODEC_CORRUPT_FRAME,
-                       "Block size %dx%d invalid with this subsampling mode",
-                       block_size_wide[chroma_bsize_base],
-                       block_size_high[chroma_bsize_base]);
+#if CONFIG_SDP && CONFIG_EXT_RECUR_PARTITIONS
+  if (xd->tree_type != LUMA_PART) {
+#endif  // CONFIG_SDP && CONFIG_EXT_RECUR_PARTITIONS
+    const struct macroblockd_plane *const pd_u = &xd->plane[1];
+    const BLOCK_SIZE chroma_bsize_base = xd->mi[0]->chroma_ref_info.bsize_base;
+    assert(chroma_bsize_base < BLOCK_SIZES_ALL);
+    if (get_plane_block_size(chroma_bsize_base, pd_u->subsampling_x,
+                             pd_u->subsampling_y) == BLOCK_INVALID) {
+      aom_internal_error(xd->error_info, AOM_CODEC_CORRUPT_FRAME,
+                         "Block size %dx%d invalid with this subsampling mode",
+                         block_size_wide[chroma_bsize_base],
+                         block_size_high[chroma_bsize_base]);
+    }
+#if CONFIG_SDP && CONFIG_EXT_RECUR_PARTITIONS
   }
+#endif  // CONFIG_SDP && CONFIG_EXT_RECUR_PARTITIONS
 }
 
 typedef struct PadBlock {
@@ -1359,12 +1365,12 @@ static AOM_INLINE void parse_decode_block(AV1Decoder *const pbi,
     }
   }
 #if CONFIG_SDP
-  if (mbmi->skip_txfm[xd->tree_type == CHROMA_PART])
-    av1_reset_entropy_context(xd, bsize, num_planes);
   assert(bsize == mbmi->sb_type[av1_get_sdp_idx(xd->tree_type)]);
+  if (mbmi->skip_txfm[xd->tree_type == CHROMA_PART])
 #else
-  if (mbmi->skip_txfm) av1_reset_entropy_context(xd, bsize, num_planes);
-#endif  // !CONFIG_EXT_RECUR_PARTITIONS && !CONFIG_SDP
+  if (mbmi->skip_txfm)
+#endif  // CONFIG_SDP
+    av1_reset_entropy_context(xd, bsize, num_planes);
 #if CONFIG_SDP
   decode_token_recon_block(pbi, td, r, partition, bsize);
 #else
@@ -1490,8 +1496,9 @@ static PARTITION_TYPE read_partition(MACROBLOCKD *xd, int mi_row, int mi_col,
   if (plane == 1 && bsize == BLOCK_8X8) {
     return PARTITION_NONE;
   }
-  int parent_block_width = block_size_wide[bsize];
-  if (plane && parent_block_width >= SHARED_PART_SIZE) {
+  const int min_bsize_1d =
+      AOMMIN(block_size_high[bsize], block_size_wide[bsize]);
+  if (plane && min_bsize_1d >= SHARED_PART_SIZE) {
     const int ssx = cm->seq_params.subsampling_x;
     const int ssy = cm->seq_params.subsampling_y;
     if (ptree_luma)

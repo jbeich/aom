@@ -9,6 +9,7 @@
  * PATENTS file, you can obtain it at www.aomedia.org/license/patent.
  */
 
+#include "av1/common/blockd.h"
 #include "av1/common/cfl.h"
 #include "av1/common/reconintra.h"
 #include "av1/encoder/block.h"
@@ -3587,8 +3588,13 @@ int av1_txfm_uvrd(const AV1_COMP *const cpi, MACROBLOCK *x, RD_STATS *rd_stats,
   struct macroblockd_plane *const pd = &xd->plane[AOM_PLANE_U];
   const int is_inter = is_inter_block(mbmi);
   int64_t this_rd = 0, skip_txfm_rd = 0;
+#if CONFIG_SDP || CONFIG_EXT_RECUR_PARTITIONS
+  const BLOCK_SIZE plane_bsize = get_mb_plane_block_size(
+      xd, mbmi, AOM_PLANE_U, pd->subsampling_x, pd->subsampling_y);
+#else
   const BLOCK_SIZE plane_bsize = get_plane_block_size(
       mbmi->chroma_ref_info.bsize_base, pd->subsampling_x, pd->subsampling_y);
+#endif  // CONFIG_SDP || CONFIG_EXT_RECUR_PARTITIONS
 
   if (is_inter) {
     for (int plane = 1; plane < MAX_MB_PLANE; ++plane)

@@ -1825,7 +1825,8 @@ static AOM_INLINE void write_partition(const AV1_COMMON *const cm,
   if (bsize == BLOCK_8X8 && plane > 0) return;
   const int parent_block_width = block_size_wide[bsize];
 #if CONFIG_EXT_RECUR_PARTITIONS
-  if (xd->tree_type == CHROMA_PART && parent_block_width >= SHARED_PART_SIZE) {
+  const int min_bsize_1d = AOMMIN(block_size_high[bsize], parent_block_width);
+  if (xd->tree_type == CHROMA_PART && min_bsize_1d >= SHARED_PART_SIZE) {
     const int ssx = cm->seq_params.subsampling_x;
     const int ssy = cm->seq_params.subsampling_y;
     (void)ssx;

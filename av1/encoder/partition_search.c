@@ -710,6 +710,8 @@ static void pick_sb_modes(AV1_COMP *const cpi, TileDataEnc *tile_data,
   const int num_planes = av1_num_planes(cm);
   MACROBLOCKD *const xd = &x->e_mbd;
   int plane_type = (xd->tree_type == CHROMA_PART);
+  assert(IMPLIES(xd->tree_type == CHROMA_PART,
+                 AOMMIN(block_size_wide[bsize], block_size_high[bsize]) > 4));
 #endif
 
   av1_set_offsets(cpi, &tile_data->tile_info, x, mi_row, mi_col, bsize,
@@ -1622,8 +1624,10 @@ static void encode_sb(const AV1_COMP *const cpi, ThreadData *td,
 #if CONFIG_SDP
           int parent_block_width = block_size_wide[bsize];
 #if CONFIG_EXT_RECUR_PARTITIONS
+          const int min_bsize_1d =
+              AOMMIN(block_size_high[bsize], parent_block_width);
           if (xd->tree_type == CHROMA_PART && ptree_luma &&
-              parent_block_width >= SHARED_PART_SIZE) {
+              min_bsize_1d >= SHARED_PART_SIZE) {
             const int ss_x = xd->plane[1].subsampling_x;
             const int ss_y = xd->plane[1].subsampling_y;
             PARTITION_TYPE derived_partition_mode = sdp_chroma_part_from_luma(
@@ -1659,8 +1663,10 @@ static void encode_sb(const AV1_COMP *const cpi, ThreadData *td,
     } else {
 #if CONFIG_SDP
       int parent_block_width = block_size_wide[bsize];
+      const int min_bsize_1d =
+          AOMMIN(block_size_high[bsize], parent_block_width);
       if (xd->tree_type == CHROMA_PART && ptree_luma &&
-          parent_block_width >= SHARED_PART_SIZE) {
+          min_bsize_1d >= SHARED_PART_SIZE) {
         const int ss_x = xd->plane[1].subsampling_x;
         const int ss_y = xd->plane[1].subsampling_y;
         PARTITION_TYPE derived_partition_mode =
@@ -1730,7 +1736,11 @@ static void encode_sb(const AV1_COMP *const cpi, ThreadData *td,
   }
 
 #if CONFIG_SDP && CONFIG_EXT_RECUR_PARTITIONS
-  const int track_ptree_luma = ptree_luma && ptree_luma->partition == partition;
+  const int min_bsize_1d =
+      AOMMIN(block_size_high[bsize], block_size_wide[bsize]);
+  const int track_ptree_luma = xd->tree_type && ptree_luma &&
+                               ptree_luma->partition == partition &&
+                               min_bsize_1d >= SHARED_PART_SIZE;
 #endif  // CONFIG_SDP && CONFIG_EXT_RECUR_PARTITIONS
   switch (partition) {
     case PARTITION_NONE:
@@ -3310,24 +3320,27 @@ static void init_partition_search_state_params(
   // SDP and ERP are on.
   (void)pc_tree;
 #endif  // CONFIG_EXT_RECUR_PARTITIONS
+  const bool no_sub_16_chroma_part =
+      xd->tree_type != CHROMA_PART ||
+      (block_size_wide[bsize] > 8 && block_size_high[bsize] > 8);
 
   // Initialize allowed partition types for the partition block.
   part_search_state->is_block_splittable = is_partition_point(bsize);
   part_search_state->partition_none_allowed =
       blk_params->has_rows && blk_params->has_cols;
+  const BLOCK_SIZE horz_subsize = get_partition_subsize(bsize, PARTITION_HORZ);
   part_search_state->partition_rect_allowed[HORZ] =
       blk_params->has_cols && blk_params->bsize_at_least_8x8 &&
-      cpi->oxcf.part_cfg.enable_rect_partitions &&
-      (xd->tree_type != CHROMA_PART || bsize > BLOCK_8X8) &&
-      get_plane_block_size(get_partition_subsize(bsize, PARTITION_HORZ),
-                           part_search_state->ss_x,
+      cpi->oxcf.part_cfg.enable_rect_partitions && no_sub_16_chroma_part &&
+      horz_subsize != BLOCK_INVALID &&
+      get_plane_block_size(horz_subsize, part_search_state->ss_x,
                            part_search_state->ss_y) != BLOCK_INVALID;
+  const BLOCK_SIZE vert_subsize = get_partition_subsize(bsize, PARTITION_VERT);
   part_search_state->partition_rect_allowed[VERT] =
       blk_params->has_rows && blk_params->bsize_at_least_8x8 &&
-      (xd->tree_type != CHROMA_PART || bsize > BLOCK_8X8) &&
-      cpi->oxcf.part_cfg.enable_rect_partitions &&
-      get_plane_block_size(get_partition_subsize(bsize, PARTITION_VERT),
-                           part_search_state->ss_x,
+      no_sub_16_chroma_part && cpi->oxcf.part_cfg.enable_rect_partitions &&
+      vert_subsize != BLOCK_INVALID &&
+      get_plane_block_size(vert_subsize, part_search_state->ss_x,
                            part_search_state->ss_y) != BLOCK_INVALID;
 #else  // !CONFIG_SDP
 #if !CONFIG_EXT_RECUR_PARTITIONS
@@ -5412,11 +5425,12 @@ bool av1_rd_pick_partition(AV1_COMP *const cpi, ThreadData *td,
 
 #if CONFIG_SDP
   int luma_split_flag = 0;
-  int parent_block_width = block_size_wide[bsize];
+  const int parent_block_width = block_size_wide[bsize];
 #if CONFIG_EXT_RECUR_PARTITIONS
+  const int min_bsize_1d = AOMMIN(block_size_high[bsize], parent_block_width);
   int horz_3_allowed_sdp = 1;
   int vert_3_allowed_sdp = 1;
-  if (xd->tree_type == CHROMA_PART && parent_block_width >= SHARED_PART_SIZE &&
+  if (xd->tree_type == CHROMA_PART && min_bsize_1d >= SHARED_PART_SIZE &&
       ptree_luma) {
     PARTITION_TYPE derived_partition_mode = sdp_chroma_part_from_luma(
         bsize, ptree_luma->partition, part_search_state.ss_x,
@@ -5554,14 +5568,9 @@ BEGIN_PARTITION_SEARCH:
   // Disable 4-way partition search flags for width less than twice the
   // minimum width.
 #if CONFIG_SDP
-#if CONFIG_SDP
   if (blk_params.width < (blk_params.min_partition_size_1d << 2) ||
       (xd->tree_type == CHROMA_PART && bsize <= BLOCK_16X16) ||
       (luma_split_flag > 3)) {
-#else
-  if (blk_params.width < (blk_params.min_partition_size_1d << 2) ||
-      (xd->tree_type == CHROMA_PART && bsize <= BLOCK_16X16)) {
-#endif
 #else
   if (blk_params.width < (blk_params.min_partition_size_1d << 2)) {
 #endif
@@ -5616,6 +5625,7 @@ BEGIN_PARTITION_SEARCH:
       partition_3_allowed && (is_square_block(bsize) || is_tall_block) &&
 #if CONFIG_SDP
       horz_3_allowed_sdp &&
+      (xd->tree_type != CHROMA_PART || block_size_high[bsize] > 16) &&
 #endif  // CONFIG_SDP
       check_is_chroma_size_valid(PARTITION_HORZ_3, bsize, mi_row, mi_col,
                                  part_search_state.ss_x, part_search_state.ss_y,
@@ -5624,6 +5634,7 @@ BEGIN_PARTITION_SEARCH:
       partition_3_allowed && (is_square_block(bsize) || is_wide_block) &&
 #if CONFIG_SDP
       vert_3_allowed_sdp &&
+      (xd->tree_type != CHROMA_PART || block_size_wide[bsize] > 16) &&
 #endif  // CONFIG_SDP
       check_is_chroma_size_valid(PARTITION_VERT_3, bsize, mi_row, mi_col,
                                  part_search_state.ss_x, part_search_state.ss_y,

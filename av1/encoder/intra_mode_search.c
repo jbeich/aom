@@ -324,13 +324,12 @@ static int cfl_rd_pick_alpha(MACROBLOCK *const x, const AV1_COMP *const cpi,
   MB_MODE_INFO *const mbmi = xd->mi[0];
   const MACROBLOCKD_PLANE *pd = &xd->plane[AOM_PLANE_U];
   const ModeCosts *mode_costs = &x->mode_costs;
-#if CONFIG_EXT_RECUR_PARTITIONS
-  const BLOCK_SIZE plane_bsize = get_plane_block_size(
-      mbmi->chroma_ref_info.bsize_base, pd->subsampling_x, pd->subsampling_y);
-#elif CONFIG_SDP
+#if CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP
+#if CONFIG_SDP
   assert(xd->tree_type != LUMA_PART);
-  const BLOCK_SIZE plane_bsize = get_plane_block_size(
-      mbmi->sb_type[PLANE_TYPE_UV], pd->subsampling_x, pd->subsampling_y);
+#endif  // CONFIG_SDP
+  const BLOCK_SIZE plane_bsize = get_mb_plane_block_size(
+      xd, mbmi, PLANE_TYPE_UV, pd->subsampling_x, pd->subsampling_y);
 #else   // !CONFIG_SDP && ! CONFIG_EXT_RECUR_PARTITIONS
   const BLOCK_SIZE plane_bsize =
       get_plane_block_size(mbmi->sb_type, pd->subsampling_x, pd->subsampling_y);
