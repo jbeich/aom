@@ -3318,7 +3318,27 @@ static void init_partition_search_state_params(
 #if CONFIG_EXT_RECUR_PARTITIONS
   // TODO(chiyotsai,yuec@google.com): Fix the rect_allowed condition when both
   // SDP and ERP are on.
-  (void)pc_tree;
+  const int is_chroma_size_valid_horz =
+      is_partition_valid(bsize, PARTITION_HORZ) &&
+      IMPLIES(xd->tree_type == SHARED_PART,
+              check_is_chroma_size_valid(PARTITION_HORZ, bsize, mi_row, mi_col,
+                                         part_search_state->ss_x,
+                                         part_search_state->ss_y, pc_tree)) &&
+      IMPLIES(xd->tree_type != SHARED_PART,
+              get_plane_block_size(get_partition_subsize(bsize, PARTITION_HORZ),
+                                   part_search_state->ss_x,
+                                   part_search_state->ss_y) != BLOCK_INVALID);
+
+  const int is_chroma_size_valid_vert =
+      is_partition_valid(bsize, PARTITION_VERT) &&
+      IMPLIES(xd->tree_type == SHARED_PART,
+              check_is_chroma_size_valid(PARTITION_VERT, bsize, mi_row, mi_col,
+                                         part_search_state->ss_x,
+                                         part_search_state->ss_y, pc_tree)) &&
+      IMPLIES(xd->tree_type != SHARED_PART,
+              get_plane_block_size(get_partition_subsize(bsize, PARTITION_VERT),
+                                   part_search_state->ss_x,
+                                   part_search_state->ss_y) != BLOCK_INVALID);
 #endif  // CONFIG_EXT_RECUR_PARTITIONS
   const bool no_sub_16_chroma_part =
       xd->tree_type != CHROMA_PART ||
@@ -3328,21 +3348,33 @@ static void init_partition_search_state_params(
   part_search_state->is_block_splittable = is_partition_point(bsize);
   part_search_state->partition_none_allowed =
       blk_params->has_rows && blk_params->has_cols;
+#if !CONFIG_EXT_RECUR_PARTITIONS
   const BLOCK_SIZE horz_subsize = get_partition_subsize(bsize, PARTITION_HORZ);
+#endif  // !CONFIG_EXT_RECUR_PARTITIONS
   part_search_state->partition_rect_allowed[HORZ] =
       blk_params->has_cols && blk_params->bsize_at_least_8x8 &&
       cpi->oxcf.part_cfg.enable_rect_partitions && no_sub_16_chroma_part &&
+#if CONFIG_EXT_RECUR_PARTITIONS
+      is_chroma_size_valid_horz;
+#else
       horz_subsize != BLOCK_INVALID &&
       get_plane_block_size(horz_subsize, part_search_state->ss_x,
                            part_search_state->ss_y) != BLOCK_INVALID;
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
+#if !CONFIG_EXT_RECUR_PARTITIONS
   const BLOCK_SIZE vert_subsize = get_partition_subsize(bsize, PARTITION_VERT);
+#endif  // !CONFIG_EXT_RECUR_PARTITIONS
   part_search_state->partition_rect_allowed[VERT] =
       blk_params->has_rows && blk_params->bsize_at_least_8x8 &&
       no_sub_16_chroma_part && cpi->oxcf.part_cfg.enable_rect_partitions &&
+#if CONFIG_EXT_RECUR_PARTITIONS
+      is_chroma_size_valid_vert;
+#else
       vert_subsize != BLOCK_INVALID &&
       get_plane_block_size(vert_subsize, part_search_state->ss_x,
                            part_search_state->ss_y) != BLOCK_INVALID;
-#else  // !CONFIG_SDP
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
+#else   // !CONFIG_SDP
 #if !CONFIG_EXT_RECUR_PARTITIONS
   part_search_state->do_square_split = blk_params->bsize_at_least_8x8;
 #endif  // !CONFIG_EXT_RECUR_PARTITIONS

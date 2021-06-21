@@ -21,6 +21,7 @@
 #include "aom_ports/bitops.h"
 #include "aom_ports/mem_ops.h"
 #include "aom_ports/system_state.h"
+#include "av1/common/blockd.h"
 #if CONFIG_BITSTREAM_DEBUG
 #include "aom_util/debug_util.h"
 #endif  // CONFIG_BITSTREAM_DEBUG
@@ -400,7 +401,14 @@ static AOM_INLINE void pack_txb_tokens(
   if (blk_row >= max_blocks_high || blk_col >= max_blocks_wide) return;
 
   const struct macroblockd_plane *const pd = &xd->plane[plane];
-#if CONFIG_SDP
+#if CONFIG_SDP && CONFIG_EXT_RECUR_PARTITIONS
+  const BLOCK_SIZE bsize_base = get_bsize_base(xd, mbmi, plane);
+  const TX_SIZE plane_tx_size =
+      plane ? av1_get_max_uv_txsize(bsize_base, pd->subsampling_x,
+                                    pd->subsampling_y)
+            : mbmi->inter_tx_size[av1_get_txb_size_index(plane_bsize, blk_row,
+                                                         blk_col)];
+#elif CONFIG_SDP
   const TX_SIZE plane_tx_size =
       plane ? av1_get_max_uv_txsize(mbmi->sb_type[plane > 0], pd->subsampling_x,
                                     pd->subsampling_y)
@@ -1579,12 +1587,11 @@ static AOM_INLINE void write_inter_txb_coeff(
 #if CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP
   const BLOCK_SIZE plane_bsize =
       get_mb_plane_block_size(xd, mbmi, plane, ss_x, ss_y);
-#if CONFIG_SDP
+#if !CONFIG_EXT_RECUR_PARTITIONS
   assert(plane_bsize ==
          get_plane_block_size(mbmi->sb_type[PLANE_TYPE_Y], ss_x, ss_y));
-#else
-  assert(mbmi->sb_type < BLOCK_SIZES_ALL);
-#endif  // CONFIG_SDP
+#endif  // !CONFIG_EXT_RECUR_PARTITIONS
+  assert(plane_bsize < BLOCK_SIZES_ALL);
 #else
   const BLOCK_SIZE bsize = mbmi->sb_type;
   assert(bsize < BLOCK_SIZES_ALL);
@@ -1620,7 +1627,9 @@ static AOM_INLINE void write_tokens_b(AV1_COMP *cpi, aom_writer *w,
   MACROBLOCK *const x = &cpi->td.mb;
   MACROBLOCKD *const xd = &x->e_mbd;
   MB_MODE_INFO *const mbmi = xd->mi[0];
-#if CONFIG_SDP
+#if CONFIG_EXT_RECUR_PARTITIONS && CONFIG_SDP
+  const BLOCK_SIZE bsize = get_bsize_base(xd, mbmi, AOM_PLANE_Y);
+#elif CONFIG_SDP
   const BLOCK_SIZE bsize = mbmi->sb_type[xd->tree_type == CHROMA_PART];
 #else
   const BLOCK_SIZE bsize = mbmi->sb_type;

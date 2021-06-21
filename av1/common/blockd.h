@@ -1785,7 +1785,11 @@ static INLINE TX_SIZE av1_get_tx_size(int plane, const MACROBLOCKD *xd) {
   if (xd->lossless[mbmi->segment_id]) return TX_4X4;
   if (plane == 0) return mbmi->tx_size;
   const MACROBLOCKD_PLANE *pd = &xd->plane[plane];
-#if CONFIG_SDP
+#if CONFIG_SDP && CONFIG_EXT_RECUR_PARTITIONS
+  const BLOCK_SIZE bsize_base = get_bsize_base(xd, mbmi, plane);
+  return av1_get_max_uv_txsize(bsize_base, pd->subsampling_x,
+                               pd->subsampling_y);
+#elif CONFIG_SDP
   return av1_get_max_uv_txsize(mbmi->sb_type[PLANE_TYPE_UV], pd->subsampling_x,
                                pd->subsampling_y);
 #else

@@ -174,7 +174,15 @@ void av1_reset_entropy_context(MACROBLOCKD *xd, BLOCK_SIZE bsize,
   // decoder is failing to clear the context after encoding a skip_txfm chroma
   // block.
   const int plane_start = (xd->tree_type == CHROMA_PART);
-  const int plane_end = (xd->tree_type == LUMA_PART) ? 1 : num_planes;
+  int plane_end = 0;
+  switch (xd->tree_type) {
+    case LUMA_PART: plane_end = 1; break;
+    case CHROMA_PART: plane_end = num_planes; break;
+    case SHARED_PART:
+      plane_end = 1 + (num_planes - 1) * xd->is_chroma_ref;
+      break;
+    default: assert(0);
+  }
   for (int i = plane_start; i < plane_end; ++i) {
 #else
   const int nplanes = 1 + (num_planes - 1) * xd->is_chroma_ref;
@@ -184,10 +192,10 @@ void av1_reset_entropy_context(MACROBLOCKD *xd, BLOCK_SIZE bsize,
 #if CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP
     const BLOCK_SIZE plane_bsize = get_mb_plane_block_size(
         xd, xd->mi[0], i, pd->subsampling_x, pd->subsampling_y);
-#if CONFIG_SDP
+#if !CONFIG_EXT_RECUR_PARTITIONS
     assert(plane_bsize ==
            get_plane_block_size(bsize, pd->subsampling_x, pd->subsampling_y));
-#endif  // CONFIG_SDP
+#endif  // !CONFIG_EXT_RECUR_PARTITIONS
     (void)bsize;
 #else
     const BLOCK_SIZE plane_bsize =

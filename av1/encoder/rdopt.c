@@ -615,10 +615,15 @@ static int64_t get_sse(const AV1_COMP *cpi, const MACROBLOCK *x,
     if (plane && !xd->is_chroma_ref) break;
     const struct macroblock_plane *const p = &x->plane[plane];
     const struct macroblockd_plane *const pd = &xd->plane[plane];
-#if CONFIG_SDP
+#if CONFIG_SDP && CONFIG_EXT_RECUR_PARTITIONS
+    const BLOCK_SIZE bs = get_mb_plane_block_size(
+        xd, mbmi, plane, pd->subsampling_x, pd->subsampling_y);
+#elif CONFIG_SDP
     const BLOCK_SIZE bs = get_plane_block_size(
         mbmi->sb_type[plane > 0], pd->subsampling_x, pd->subsampling_y);
 #else
+    // TODO(chiyotsai, yuec): This appears to be wrong when EXT_RECUR_PARTITIONS
+    // is on?
     const BLOCK_SIZE bs = get_plane_block_size(mbmi->sb_type, pd->subsampling_x,
                                                pd->subsampling_y);
 #endif

@@ -202,16 +202,23 @@ static TX_SIZE get_transform_size(const MACROBLOCKD *const xd,
       (frame_is_intra_only(cm) && !cm->seq_params.monochrome && plane > 0 &&
        cm->seq_params.enable_sdp);
 #endif
-  TX_SIZE tx_size = (plane == AOM_PLANE_Y)
-                        ? mbmi->tx_size
-#if CONFIG_SDP
-                        : av1_get_max_uv_txsize(mbmi->sb_type[plane_type],
-                                                plane_ptr->subsampling_x,
-                                                plane_ptr->subsampling_y);
+#if CONFIG_EXT_RECUR_PARTITIONS && CONFIG_SDP
+  const BLOCK_SIZE bsize_base = get_bsize_base(xd, mbmi, plane);
+#endif  // CONFIG_EXT_RECUR_PARTITIONS && CONFIG_SDP
+
+  TX_SIZE tx_size =
+      (plane == AOM_PLANE_Y)
+          ? mbmi->tx_size
+#if CONFIG_EXT_RECUR_PARTITIONS && CONFIG_SDP
+          : av1_get_max_uv_txsize(bsize_base, plane_ptr->subsampling_x,
+                                  plane_ptr->subsampling_y);
+#elif CONFIG_SDP
+          : av1_get_max_uv_txsize(mbmi->sb_type[plane_type],
+                                  plane_ptr->subsampling_x,
+                                  plane_ptr->subsampling_y);
 #else
-                        : av1_get_max_uv_txsize(mbmi->sb_type,
-                                                plane_ptr->subsampling_x,
-                                                plane_ptr->subsampling_y);
+          : av1_get_max_uv_txsize(mbmi->sb_type, plane_ptr->subsampling_x,
+                                  plane_ptr->subsampling_y);
 #endif
   assert(tx_size < TX_SIZES_ALL);
 #if CONFIG_SDP
@@ -348,9 +355,11 @@ static TX_SIZE set_lpf_parameters(
           const BLOCK_SIZE bsize = get_mb_plane_block_size_from_tree_type(
               mbmi, tree_type, plane, plane_ptr->subsampling_x,
               plane_ptr->subsampling_y);
+#if !CONFIG_EXT_RECUR_PARTITIONS
           assert(bsize == get_plane_block_size(mbmi->sb_type[plane_type],
                                                plane_ptr->subsampling_x,
                                                plane_ptr->subsampling_y));
+#endif  // !CONFIG_EXT_RECUR_PARTITIONS
 #elif CONFIG_EXT_RECUR_PARTITIONS
           const BLOCK_SIZE bsize =
               get_mb_plane_block_size(xd, mbmi, plane, plane_ptr->subsampling_x,

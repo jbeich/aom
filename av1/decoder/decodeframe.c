@@ -288,7 +288,14 @@ static AOM_INLINE void decode_reconstruct_tx(
   DecoderCodingBlock *const dcb = &td->dcb;
   MACROBLOCKD *const xd = &dcb->xd;
   const struct macroblockd_plane *const pd = &xd->plane[plane];
-#if CONFIG_SDP
+#if CONFIG_EXT_RECUR_PARTITIONS && CONFIG_SDP
+  const BLOCK_SIZE bsize_base = get_bsize_base(xd, mbmi, plane);
+  const TX_SIZE plane_tx_size =
+      plane ? av1_get_max_uv_txsize(bsize_base, pd->subsampling_x,
+                                    pd->subsampling_y)
+            : mbmi->inter_tx_size[av1_get_txb_size_index(plane_bsize, blk_row,
+                                                         blk_col)];
+#elif CONFIG_SDP
   if (xd->tree_type == SHARED_PART)
     assert(mbmi->sb_type[PLANE_TYPE_Y] == mbmi->sb_type[PLANE_TYPE_UV]);
   const TX_SIZE plane_tx_size =
@@ -1054,9 +1061,9 @@ static AOM_INLINE void decode_token_recon_block(AV1Decoder *const pbi,
 #if CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP
             const BLOCK_SIZE plane_bsize =
                 get_mb_plane_block_size(xd, mbmi, plane, ss_x, ss_y);
-#if CONFIG_SDP
+#if !CONFIG_EXT_RECUR_PARTITIONS
             assert(plane_bsize == get_plane_block_size(bsize, ss_x, ss_y));
-#endif  // CONFIG_SDP
+#endif  // !CONFIG_EXT_RECUR_PARTITIONS
 #else
             const BLOCK_SIZE plane_bsize =
                 get_plane_block_size(bsize, ss_x, ss_y);

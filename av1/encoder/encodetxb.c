@@ -1570,9 +1570,9 @@ void av1_update_intra_mb_txb_context(const AV1_COMP *cpi, ThreadData *td,
 #if CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP
     const BLOCK_SIZE plane_bsize =
         get_mb_plane_block_size(xd, mbmi, plane, ss_x, ss_y);
-#if CONFIG_SDP
+#if !CONFIG_EXT_RECUR_PARTITIONS
     assert(plane_bsize == get_plane_block_size(bsize, ss_x, ss_y));
-#endif  // CONFIG_SDP
+#endif  // !CONFIG_EXT_RECUR_PARTITIONS
 #else
     const BLOCK_SIZE plane_bsize = get_plane_block_size(bsize, ss_x, ss_y);
 #endif  // CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP

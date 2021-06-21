@@ -476,7 +476,14 @@ static void encode_block_inter(int plane, int block, int blk_row, int blk_col,
   const int max_blocks_wide = max_block_wide(xd, plane_bsize, plane);
 
   if (blk_row >= max_blocks_high || blk_col >= max_blocks_wide) return;
-#if CONFIG_SDP
+#if CONFIG_EXT_RECUR_PARTITIONS
+  const BLOCK_SIZE bsize_base = get_bsize_base(xd, mbmi, plane);
+  const TX_SIZE plane_tx_size =
+      plane ? av1_get_max_uv_txsize(bsize_base, pd->subsampling_x,
+                                    pd->subsampling_y)
+            : mbmi->inter_tx_size[av1_get_txb_size_index(plane_bsize, blk_row,
+                                                         blk_col)];
+#elif CONFIG_SDP
   const TX_SIZE plane_tx_size =
       plane ? av1_get_max_uv_txsize(mbmi->sb_type[xd->tree_type == CHROMA_PART],
                                     pd->subsampling_x, pd->subsampling_y)
@@ -656,14 +663,14 @@ void av1_encode_sb(const struct AV1_COMP *cpi, MACROBLOCK *x,
 #if CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP
     const BLOCK_SIZE plane_bsize =
         get_mb_plane_block_size(xd, mbmi, plane, subsampling_x, subsampling_y);
-#if CONFIG_SDP
+#if !CONFIG_EXT_RECUR_PARTITIONS
     const BLOCK_SIZE bsize_base =
         plane ? mbmi->chroma_ref_info.bsize_base
               : mbmi->sb_type[xd->tree_type == CHROMA_PART];
     assert(plane_bsize ==
            get_plane_block_size(bsize_base, subsampling_x, subsampling_y));
     (void)bsize_base;
-#endif  // CONFIG_SDP
+#endif  // !CONFIG_EXT_RECUR_PARTITIONS
 #else
     const BLOCK_SIZE bsize_base =
         plane ? mbmi->chroma_ref_info.bsize_base : mbmi->sb_type;
@@ -857,9 +864,9 @@ void av1_encode_intra_block_plane(const struct AV1_COMP *cpi, MACROBLOCK *x,
 #if CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP
   const BLOCK_SIZE plane_bsize =
       get_mb_plane_block_size(xd, xd->mi[0], plane, ss_x, ss_y);
-#if CONFIG_SDP
+#if !CONFIG_EXT_RECUR_PARTITIONS
   assert(plane_bsize == get_plane_block_size(bsize, ss_x, ss_y));
-#endif  // CONFIG_SDP
+#endif  // !CONFIG_EXT_RECUR_PARTITIONS
   (void)bsize;
 #else
   const BLOCK_SIZE bsize_base =

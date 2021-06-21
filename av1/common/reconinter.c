@@ -1433,9 +1433,9 @@ void av1_combine_interintra(MACROBLOCKD *xd, BLOCK_SIZE bsize, int plane,
 #if CONFIG_EXT_RECUR_PARTITIONS || CONFIG_SDP
   BLOCK_SIZE plane_bsize =
       get_mb_plane_block_size(xd, xd->mi[0], plane, ssx, ssy);
-#if CONFIG_SDP
+#if !CONFIG_EXT_RECUR_PARTITIONS
   assert(plane_bsize == get_plane_block_size(bsize, ssx, ssy));
-#endif  // CONFIG_SDP
+#endif  // !CONFIG_EXT_RECUR_PARTITIONS
 #else
   BLOCK_SIZE plane_bsize = get_plane_block_size(bsize, ssx, ssy);
 #endif  // CONFIG_EXT_RECUR_PARTITIONS
