@@ -37,12 +37,12 @@ static PREDICTION_MODE read_intra_mode(aom_reader *r, aom_cdf_prob *cdf) {
 }
 
 static void read_cdef(AV1_COMMON *cm, aom_reader *r, MACROBLOCKD *const xd) {
-  assert(xd->tree_type != CHROMA_PART);
 #if CONFIG_SDP
+  assert(xd->tree_type != CHROMA_PART);
   const int skip_txfm = xd->mi[0]->skip_txfm[0];
 #else
   const int skip_txfm = xd->mi[0]->skip_txfm;
-#endif
+#endif  // CONFIG_SDP
   if (cm->features.coded_lossless) return;
   if (cm->features.allow_intrabc) {
     assert(cm->cdef_info.cdef_bits == 0);

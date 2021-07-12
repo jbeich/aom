@@ -85,8 +85,13 @@ typedef struct {
   // Block width of current partition block.
   int width;
 
+#if CONFIG_EXT_RECUR_PARTITIONS
+  // Minimum partition size allowed.
+  BLOCK_SIZE min_partition_size;
+#else
   // Block width of minimum partition size allowed.
   int min_partition_size_1d;
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
 
   // Flag to indicate if partition is 8x8 or higher size.
   int bsize_at_least_8x8;

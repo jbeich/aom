@@ -13,6 +13,7 @@
 #define AOM_AV1_COMMON_COMMON_DATA_H_
 
 #include <assert.h>
+#include <stdbool.h>
 
 #include "av1/common/enums.h"
 #include "aom/aom_integer.h"
@@ -547,6 +548,14 @@ static const int quant_dist_lookup_table[2][4][2] = {
   { { 9, 7 }, { 11, 5 }, { 12, 4 }, { 13, 3 } },
   { { 7, 9 }, { 5, 11 }, { 4, 12 }, { 3, 13 } },
 };
+
+static AOM_INLINE bool is_bsize_geq(BLOCK_SIZE bsize1, BLOCK_SIZE bsize2) {
+  if (bsize1 == BLOCK_INVALID || bsize2 == BLOCK_INVALID) {
+    return false;
+  }
+  return block_size_wide[bsize1] >= block_size_wide[bsize2] &&
+         block_size_high[bsize1] >= block_size_high[bsize2];
+}
 
 #ifdef __cplusplus
 }  // extern "C"

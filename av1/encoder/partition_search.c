@@ -12,6 +12,7 @@
 #include "aom_ports/system_state.h"
 
 #include "av1/common/blockd.h"
+#include "av1/common/common_data.h"
 #include "av1/common/enums.h"
 #include "av1/common/reconintra.h"
 
@@ -713,6 +714,7 @@ static void pick_sb_modes(AV1_COMP *const cpi, TileDataEnc *tile_data,
   assert(IMPLIES(xd->tree_type == CHROMA_PART,
                  AOMMIN(block_size_wide[bsize], block_size_high[bsize]) > 4));
 #endif
+  assert(is_bsize_geq(bsize, cpi->common.mi_params.mi_alloc_bsize));
 
   av1_set_offsets(cpi, &tile_data->tile_info, x, mi_row, mi_col, bsize,
                   &ctx->chroma_ref_info);
@@ -3221,8 +3223,12 @@ static void init_partition_search_state_params(
   blk_params->mi_col_edge = mi_col + blk_params->mi_step;
 #endif  // CONFIG_EXT_RECUR_PARTITIONS
   blk_params->width = block_size_wide[bsize];
+#if CONFIG_EXT_RECUR_PARTITIONS
+  blk_params->min_partition_size = x->sb_enc.min_partition_size;
+#else
   blk_params->min_partition_size_1d =
       block_size_wide[x->sb_enc.min_partition_size];
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
   blk_params->subsize = get_partition_subsize(bsize, PARTITION_SPLIT);
   blk_params->split_bsize2 = blk_params->subsize;
   blk_params->bsize_at_least_8x8 = (bsize >= BLOCK_8X8);
@@ -3348,26 +3354,24 @@ static void init_partition_search_state_params(
   part_search_state->is_block_splittable = is_partition_point(bsize);
   part_search_state->partition_none_allowed =
       blk_params->has_rows && blk_params->has_cols;
-#if !CONFIG_EXT_RECUR_PARTITIONS
   const BLOCK_SIZE horz_subsize = get_partition_subsize(bsize, PARTITION_HORZ);
-#endif  // !CONFIG_EXT_RECUR_PARTITIONS
   part_search_state->partition_rect_allowed[HORZ] =
       blk_params->has_cols && blk_params->bsize_at_least_8x8 &&
       cpi->oxcf.part_cfg.enable_rect_partitions && no_sub_16_chroma_part &&
 #if CONFIG_EXT_RECUR_PARTITIONS
+      is_bsize_geq(horz_subsize, blk_params->min_partition_size) &&
       is_chroma_size_valid_horz;
 #else
       horz_subsize != BLOCK_INVALID &&
       get_plane_block_size(horz_subsize, part_search_state->ss_x,
                            part_search_state->ss_y) != BLOCK_INVALID;
 #endif  // CONFIG_EXT_RECUR_PARTITIONS
-#if !CONFIG_EXT_RECUR_PARTITIONS
   const BLOCK_SIZE vert_subsize = get_partition_subsize(bsize, PARTITION_VERT);
-#endif  // !CONFIG_EXT_RECUR_PARTITIONS
   part_search_state->partition_rect_allowed[VERT] =
       blk_params->has_rows && blk_params->bsize_at_least_8x8 &&
       no_sub_16_chroma_part && cpi->oxcf.part_cfg.enable_rect_partitions &&
 #if CONFIG_EXT_RECUR_PARTITIONS
+      is_bsize_geq(vert_subsize, blk_params->min_partition_size) &&
       is_chroma_size_valid_vert;
 #else
       vert_subsize != BLOCK_INVALID &&
@@ -3400,6 +3404,8 @@ static void init_partition_search_state_params(
 #if CONFIG_EXT_RECUR_PARTITIONS
       (blk_params->has_cols || !blk_params->has_rows) &&
       is_partition_valid(bsize, PARTITION_HORZ) && is_chroma_size_valid_horz &&
+      is_bsize_geq(get_partition_subsize(bsize, PARTITION_HORZ),
+                   blk_params->min_partition_size) &&
 #else   // CONFIG_EXT_RECUR_PARTITIONS
       blk_params->has_cols && is_partition_valid(bsize, PARTITION_HORZ) &&
       get_plane_block_size(get_partition_subsize(bsize, PARTITION_HORZ),
@@ -3411,6 +3417,8 @@ static void init_partition_search_state_params(
 #if CONFIG_EXT_RECUR_PARTITIONS
       (blk_params->has_rows || !blk_params->has_cols) &&
       is_partition_valid(bsize, PARTITION_VERT) && is_chroma_size_valid_vert &&
+      is_bsize_geq(get_partition_subsize(bsize, PARTITION_VERT),
+                   blk_params->min_partition_size) &&
 #else   // CONFIG_EXT_RECUR_PARTITIONS
       blk_params->has_rows && is_partition_valid(bsize, PARTITION_VERT) &&
       get_plane_block_size(get_partition_subsize(bsize, PARTITION_VERT),
@@ -3506,14 +3514,22 @@ static AOM_INLINE void reset_part_limitations(
 #endif  // !CONFIG_EXT_RECUR_PARTITIONS
   part_search_state->partition_none_allowed =
       blk_params.has_rows && blk_params.has_cols &&
+#if CONFIG_EXT_RECUR_PARTITIONS
+      is_bsize_geq(blk_params.bsize, blk_params.min_partition_size);
+#else
       (blk_params.width >= blk_params.min_partition_size_1d);
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
 
   // Initialize allowed partition types for the partition block.
 #if CONFIG_EXT_RECUR_PARTITIONS
-  int is_chroma_size_valid_horz = check_is_chroma_size_valid(
+  const BLOCK_SIZE horz_subsize =
+      get_partition_subsize(blk_params.bsize, PARTITION_HORZ);
+  const BLOCK_SIZE vert_subsize =
+      get_partition_subsize(blk_params.bsize, PARTITION_VERT);
+  const int is_chroma_size_valid_horz = check_is_chroma_size_valid(
       PARTITION_HORZ, blk_params.bsize, blk_params.mi_row, blk_params.mi_col,
       part_search_state->ss_x, part_search_state->ss_y, pc_tree);
-  int is_chroma_size_valid_vert = check_is_chroma_size_valid(
+  const int is_chroma_size_valid_vert = check_is_chroma_size_valid(
       PARTITION_VERT, blk_params.bsize, blk_params.mi_row, blk_params.mi_col,
       part_search_state->ss_x, part_search_state->ss_y, pc_tree);
 #endif  // CONFIG_EXT_RECUR_PARTITIONS
@@ -3522,39 +3538,47 @@ static AOM_INLINE void reset_part_limitations(
       (blk_params.has_cols || (!blk_params.has_rows && !blk_params.has_cols)) &&
       is_partition_valid(blk_params.bsize, PARTITION_HORZ) &&
       is_chroma_size_valid_horz &&
+      is_bsize_geq(horz_subsize, blk_params.min_partition_size) &&
 #else   // CONFIG_EXT_RECUR_PARTITIONS
       blk_params.has_cols &&
       is_partition_valid(blk_params.bsize, PARTITION_HORZ) &&
       get_plane_block_size(
           get_partition_subsize(blk_params.bsize, PARTITION_HORZ),
           part_search_state->ss_x, part_search_state->ss_y) != BLOCK_INVALID &&
+      (blk_params.width > blk_params.min_partition_size_1d) &&
 #endif  // CONFIG_EXT_RECUR_PARTITIONS
-      cpi->oxcf.part_cfg.enable_rect_partitions &&
-      (blk_params.width > blk_params.min_partition_size_1d);
+      cpi->oxcf.part_cfg.enable_rect_partitions;
   part_search_state->partition_rect_allowed[VERT] =
 #if CONFIG_EXT_RECUR_PARTITIONS
       (blk_params.has_rows || (!blk_params.has_rows && !blk_params.has_cols)) &&
       is_partition_valid(blk_params.bsize, PARTITION_VERT) &&
       is_chroma_size_valid_vert &&
+      is_bsize_geq(vert_subsize, blk_params.min_partition_size) &&
 #else   // CONFIG_EXT_RECUR_PARTITIONS
       blk_params.has_rows &&
       is_partition_valid(blk_params.bsize, PARTITION_VERT) &&
       get_plane_block_size(
           get_partition_subsize(blk_params.bsize, PARTITION_VERT),
           part_search_state->ss_x, part_search_state->ss_y) != BLOCK_INVALID &&
+      (blk_params.width > blk_params.min_partition_size_1d) &&
 #endif  // CONFIG_EXT_RECUR_PARTITIONS
-      cpi->oxcf.part_cfg.enable_rect_partitions &&
-      (blk_params.width > blk_params.min_partition_size_1d);
+      cpi->oxcf.part_cfg.enable_rect_partitions;
   part_search_state->terminate_partition_search = 0;
 #if CONFIG_EXT_RECUR_PARTITIONS
   if (!is_square_block(blk_params.bsize)) {
     if (!part_search_state->partition_rect_allowed[HORZ] &&
         !part_search_state->partition_rect_allowed[VERT] &&
         !part_search_state->partition_none_allowed) {
-      if (block_size_wide[blk_params.bsize] > block_size_high[blk_params.bsize])
-        part_search_state->partition_rect_allowed[VERT] = 1;
-      else
-        part_search_state->partition_rect_allowed[HORZ] = 1;
+      if (block_size_wide[blk_params.bsize] >
+          block_size_high[blk_params.bsize]) {
+        if (is_bsize_geq(vert_subsize, blk_params.min_partition_size)) {
+          part_search_state->partition_rect_allowed[VERT] = 1;
+        }
+      } else {
+        if (is_bsize_geq(horz_subsize, blk_params.min_partition_size)) {
+          part_search_state->partition_rect_allowed[HORZ] = 1;
+        }
+      }
     }
   }
 #endif  // CONFIG_EXT_RECUR_PARTITIONS
@@ -4410,8 +4434,13 @@ static void prune_4_way_partition_search(
 static AOM_INLINE void set_part_none_allowed_flag(
     AV1_COMP *const cpi, PartitionSearchState *part_search_state) {
   PartitionBlkParams blk_params = part_search_state->part_blk_params;
+#if CONFIG_EXT_RECUR_PARTITIONS
+  if (is_bsize_geq(blk_params.min_partition_size, blk_params.bsize) &&
+      blk_params.has_rows && blk_params.has_cols)
+#else
   if ((blk_params.width <= blk_params.min_partition_size_1d) &&
       blk_params.has_rows && blk_params.has_cols)
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
     part_search_state->partition_none_allowed = 1;
   assert(part_search_state->terminate_partition_search == 0);
 
@@ -5661,7 +5690,10 @@ BEGIN_PARTITION_SEARCH:
 #endif  // CONFIG_SDP
       check_is_chroma_size_valid(PARTITION_HORZ_3, bsize, mi_row, mi_col,
                                  part_search_state.ss_x, part_search_state.ss_y,
-                                 pc_tree);
+                                 pc_tree) &&
+      is_bsize_geq(get_partition_subsize(bsize, PARTITION_HORZ_3),
+                   blk_params.min_partition_size);
+
   const int vert_3_allowed =
       partition_3_allowed && (is_square_block(bsize) || is_wide_block) &&
 #if CONFIG_SDP
@@ -5670,7 +5702,9 @@ BEGIN_PARTITION_SEARCH:
 #endif  // CONFIG_SDP
       check_is_chroma_size_valid(PARTITION_VERT_3, bsize, mi_row, mi_col,
                                  part_search_state.ss_x, part_search_state.ss_y,
-                                 pc_tree);
+                                 pc_tree) &&
+      is_bsize_geq(get_partition_subsize(bsize, PARTITION_VERT_3),
+                   blk_params.min_partition_size);
 
   // PARTITION_HORZ_3
   if (IMPLIES(should_reuse_mode(x, REUSE_PARTITION_MODE_FLAG),
