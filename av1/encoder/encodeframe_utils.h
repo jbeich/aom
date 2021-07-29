@@ -93,8 +93,10 @@ typedef struct {
   int min_partition_size_1d;
 #endif  // CONFIG_EXT_RECUR_PARTITIONS
 
+#if !CONFIG_EXT_RECUR_PARTITIONS
   // Flag to indicate if partition is 8x8 or higher size.
   int bsize_at_least_8x8;
+#endif  // !CONFIG_EXT_RECUR_PARTITIONS
 
   // Indicates edge blocks in frame.
   int has_rows;
@@ -356,6 +358,12 @@ void av1_restore_sb_state(const SB_FIRST_PASS_STATS *sb_fp_stats, AV1_COMP *cpi,
 void av1_set_cost_upd_freq(AV1_COMP *cpi, ThreadData *td,
                            const TileInfo *const tile_info, const int mi_row,
                            const int mi_col);
+
+#ifndef NDEBUG
+static AOM_INLINE int is_bsize_square(BLOCK_SIZE bsize) {
+  return block_size_wide[bsize] == block_size_high[bsize];
+}
+#endif  // NDEBUG
 
 #ifdef __cplusplus
 }  // extern "C"

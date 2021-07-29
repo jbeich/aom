@@ -1387,12 +1387,6 @@ void av1_prune_partitions_before_search(
   }
 }
 
-#ifndef NDEBUG
-static AOM_INLINE int is_bsize_square(BLOCK_SIZE bsize) {
-  return block_size_wide[bsize] == block_size_high[bsize];
-}
-#endif  // NDEBUG
-
 void av1_prune_partitions_by_max_min_bsize(
     SuperBlockEnc *sb_enc, BLOCK_SIZE bsize, int is_not_edge_block,
     int *partition_none_allowed, int *partition_horz_allowed,

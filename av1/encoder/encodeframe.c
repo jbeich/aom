@@ -510,9 +510,13 @@ static AOM_INLINE void encode_nonrd_sb(AV1_COMP *cpi, ThreadData *td,
           ? 2
           : 1;
   for (int loop_idx = 0; loop_idx < total_loop_num; loop_idx++) {
+    const BLOCK_SIZE min_partition_size = x->sb_enc.min_partition_size;
     xd->tree_type =
         (total_loop_num == 1 ? SHARED_PART
                              : (loop_idx == 0 ? LUMA_PART : CHROMA_PART));
+    if (xd->tree_type == CHROMA_PART) {
+      x->sb_enc.min_partition_size = AOMMAX(min_partition_size, BLOCK_8X8);
+    }
     PC_TREE *const pc_root = av1_alloc_pc_tree_node(
         mi_row, mi_col, sb_size, NULL, PARTITION_NONE, 0, 1,
         cm->seq_params.subsampling_x, cm->seq_params.subsampling_y);
@@ -521,6 +525,7 @@ static AOM_INLINE void encode_nonrd_sb(AV1_COMP *cpi, ThreadData *td,
         cpi, td, tile_data, mi, tp, mi_row, mi_col, sb_size, pc_root,
         xd->sbi->ptree_root[av1_get_sdp_idx(xd->tree_type)]);
     av1_free_pc_tree_recursive(pc_root, av1_num_planes(cm), 0, 0);
+    x->sb_enc.min_partition_size = min_partition_size;
   }
   xd->tree_type = SHARED_PART;
 #else
@@ -592,6 +597,13 @@ static INLINE void init_encode_rd_sb(AV1_COMP *cpi, ThreadData *td,
 #if CONFIG_EXT_RECUR_PARTITIONS
   av1_init_sms_data_bufs(x->sms_bufs);
 #endif  // CONFIG_EXT_RECUR_PARTITIONS
+#if CONFIG_SDP
+  if (x->e_mbd.tree_type == CHROMA_PART) {
+    assert(is_bsize_square(x->sb_enc.min_partition_size));
+    x->sb_enc.min_partition_size =
+        AOMMAX(x->sb_enc.min_partition_size, BLOCK_8X8);
+  }
+#endif  // CONFIG_SDP
 }
 
 /*!\brief Encode a superblock (RD-search-based)
@@ -652,6 +664,7 @@ static AOM_INLINE void encode_rd_sb(AV1_COMP *cpi, ThreadData *td,
     av1_choose_var_based_partitioning(cpi, tile_info, td, x, mi_row, mi_col);
 #if CONFIG_SDP
     for (int loop_idx = 0; loop_idx < total_loop_num; loop_idx++) {
+      const BLOCK_SIZE min_partition_size = x->sb_enc.min_partition_size;
       xd->tree_type =
           (total_loop_num == 1 ? SHARED_PART
                                : (loop_idx == 0 ? LUMA_PART : CHROMA_PART));
@@ -664,6 +677,7 @@ static AOM_INLINE void encode_rd_sb(AV1_COMP *cpi, ThreadData *td,
                            &dummy_rate, &dummy_dist, 1, NULL, pc_root);
       av1_free_pc_tree_recursive(pc_root, num_planes, 0, 0);
 #if CONFIG_SDP
+      x->sb_enc.min_partition_size = min_partition_size;
     }
     xd->tree_type = SHARED_PART;
 #endif
@@ -677,6 +691,7 @@ static AOM_INLINE void encode_rd_sb(AV1_COMP *cpi, ThreadData *td,
     av1_set_fixed_partitioning(cpi, tile_info, mi, mi_row, mi_col, bsize);
 #if CONFIG_SDP
     for (int loop_idx = 0; loop_idx < total_loop_num; loop_idx++) {
+      const BLOCK_SIZE min_partition_size = x->sb_enc.min_partition_size;
       xd->tree_type =
           (total_loop_num == 1 ? SHARED_PART
                                : (loop_idx == 0 ? LUMA_PART : CHROMA_PART));
@@ -709,6 +724,7 @@ static AOM_INLINE void encode_rd_sb(AV1_COMP *cpi, ThreadData *td,
                            pc_root);
       av1_free_pc_tree_recursive(pc_root, num_planes, 0, 0);
 #if CONFIG_SDP
+      x->sb_enc.min_partition_size = min_partition_size;
     }
     xd->tree_type = SHARED_PART;
 #endif
@@ -721,6 +737,7 @@ static AOM_INLINE void encode_rd_sb(AV1_COMP *cpi, ThreadData *td,
     av1_set_fixed_partitioning(cpi, tile_info, mi, mi_row, mi_col, bsize);
 #if CONFIG_SDP
     for (int loop_idx = 0; loop_idx < total_loop_num; loop_idx++) {
+      const BLOCK_SIZE min_partition_size = x->sb_enc.min_partition_size;
       xd->tree_type =
           (total_loop_num == 1 ? SHARED_PART
                                : (loop_idx == 0 ? LUMA_PART : CHROMA_PART));
@@ -753,6 +770,7 @@ static AOM_INLINE void encode_rd_sb(AV1_COMP *cpi, ThreadData *td,
                            pc_root);
       av1_free_pc_tree_recursive(pc_root, num_planes, 0, 0);
 #if CONFIG_SDP
+      x->sb_enc.min_partition_size = min_partition_size;
     }
     xd->tree_type = SHARED_PART;
 #endif  // CONFIG_SDP
@@ -782,6 +800,7 @@ static AOM_INLINE void encode_rd_sb(AV1_COMP *cpi, ThreadData *td,
     if (num_passes == 1) {
 #if CONFIG_SDP
       for (int loop_idx = 0; loop_idx < total_loop_num; loop_idx++) {
+        const BLOCK_SIZE min_partition_size = sb_enc->min_partition_size;
         xd->tree_type =
             (total_loop_num == 1 ? SHARED_PART
                                  : (loop_idx == 0 ? LUMA_PART : CHROMA_PART));
@@ -798,6 +817,7 @@ static AOM_INLINE void encode_rd_sb(AV1_COMP *cpi, ThreadData *td,
 #endif  // CONFIG_SDP && CONFIG_EXT_RECUR_PARTITIONS
             sms_root, NULL, SB_SINGLE_PASS, NULL);
 #if CONFIG_SDP
+        sb_enc->min_partition_size = min_partition_size;
       }
       xd->tree_type = SHARED_PART;
 #endif
@@ -807,6 +827,7 @@ static AOM_INLINE void encode_rd_sb(AV1_COMP *cpi, ThreadData *td,
       av1_backup_sb_state(&sb_fp_stats, cpi, td, tile_data, mi_row, mi_col);
 #if CONFIG_SDP
       for (int loop_idx = 0; loop_idx < total_loop_num; loop_idx++) {
+        const BLOCK_SIZE min_partition_size = sb_enc->min_partition_size;
         xd->tree_type =
             (total_loop_num == 1 ? SHARED_PART
                                  : (loop_idx == 0 ? LUMA_PART : CHROMA_PART));
@@ -823,6 +844,7 @@ static AOM_INLINE void encode_rd_sb(AV1_COMP *cpi, ThreadData *td,
 #endif  // CONFIG_SDP && CONFIG_EXT_RECUR_PARTITIONS
             sms_root, NULL, SB_DRY_PASS, NULL);
 #if CONFIG_SDP
+        sb_enc->min_partition_size = min_partition_size;
       }
       xd->tree_type = SHARED_PART;
 #endif
@@ -836,6 +858,7 @@ static AOM_INLINE void encode_rd_sb(AV1_COMP *cpi, ThreadData *td,
       av1_restore_sb_state(&sb_fp_stats, cpi, td, tile_data, mi_row, mi_col);
 #if CONFIG_SDP
       for (int loop_idx = 0; loop_idx < total_loop_num; loop_idx++) {
+        const BLOCK_SIZE min_partition_size = sb_enc->min_partition_size;
         xd->tree_type =
             (total_loop_num == 1 ? SHARED_PART
                                  : (loop_idx == 0 ? LUMA_PART : CHROMA_PART));
@@ -853,6 +876,7 @@ static AOM_INLINE void encode_rd_sb(AV1_COMP *cpi, ThreadData *td,
 #endif  // CONFIG_SDP && CONFIG_EXT_RECUR_PARTITIONS
             sms_root, NULL, SB_WET_PASS, NULL);
 #if CONFIG_SDP
+        sb_enc->min_partition_size = min_partition_size;
       }
       xd->tree_type = SHARED_PART;
 #endif

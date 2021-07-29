@@ -557,6 +557,13 @@ static AOM_INLINE bool is_bsize_geq(BLOCK_SIZE bsize1, BLOCK_SIZE bsize2) {
          block_size_high[bsize1] >= block_size_high[bsize2];
 }
 
+static AOM_INLINE bool is_bsize_gt(BLOCK_SIZE bsize1, BLOCK_SIZE bsize2) {
+  if (bsize1 == BLOCK_INVALID || bsize2 == BLOCK_INVALID) {
+    return false;
+  }
+  return block_size_wide[bsize1] > block_size_wide[bsize2] &&
+         block_size_high[bsize1] > block_size_high[bsize2];
+}
 #ifdef __cplusplus
 }  // extern "C"
 #endif
