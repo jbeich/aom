@@ -128,6 +128,17 @@ static void read_cdef(AV1_COMMON *cm, aom_reader *r, MACROBLOCKD *const xd) {
     mbmi->cdef_strength =
         aom_read_literal(r, cm->cdef_info.cdef_bits, ACCT_STR);
     xd->cdef_transmitted[second_index] = true;
+#if CONFIG_SDP
+    for (int x = 0; x < mi_size_wide[current_bsize]; x++) {
+      for (int y = 0; y < mi_size_high[current_bsize]; y++) {
+        const int mi_x = xd->mi_col + x;
+        const int mi_y = xd->mi_row + y;
+        const int idx = get_alloc_mi_idx(mi_params, mi_y, mi_x);
+        if (mi_y < mi_params->mi_rows && mi_x < mi_params->mi_cols)
+          mi_params->mi_alloc[idx].cdef_strength = mbmi->cdef_strength;
+      }
+    }
+#endif  // CONFIG_SDP
   }
 #endif  // CONFIG_EXT_RECUR_PARTITIONS
 }
