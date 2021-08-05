@@ -1391,7 +1391,6 @@ static AOM_INLINE void parse_decode_block(AV1Decoder *const pbi,
 #else
   decode_token_recon_block(pbi, td, r, bsize);
 #endif
-  av1_mark_block_as_coded(xd, bsize, cm->seq_params.sb_size);
 
 #if CONFIG_SDP
   if (xd->tree_type != SHARED_PART) {

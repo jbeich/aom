@@ -115,8 +115,8 @@ static void read_cdef(AV1_COMMON *cm, aom_reader *r, MACROBLOCKD *const xd) {
         get_mi_grid_idx(mi_params, mi_row_end & first_block_mask,
                         mi_col_end & first_block_mask);
 #if CONFIG_SDP
-    assert(
-        IMPLIES(mi_params->mi_grid_base[grid_idx], xd->tree_type == LUMA_PART));
+    assert(IMPLIES(!mi_params->mi_grid_base[grid_idx],
+                   xd->tree_type == LUMA_PART));
     if (!mi_params->mi_grid_base[grid_idx]) {
       const int mi_alloc_idx =
           get_alloc_mi_idx(mi_params, mi_row_end & first_block_mask,

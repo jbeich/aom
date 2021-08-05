@@ -179,7 +179,11 @@ static AOM_INLINE void scan_row_mbmi(
 
       const int ref_offset =
           ref_mask_row * xd->is_mi_coded_stride + ref_mask_col;
+#if CONFIG_SDP
+      if (!xd->is_mi_coded[0][ref_offset]) break;
+#else
       if (!xd->is_mi_coded[ref_offset]) break;
+#endif  // CONFIG_SDP
     }
 #endif  // CONFIG_EXT_RECUR_PARTITIONS
     const MB_MODE_INFO *const candidate = candidate_mi0[col_offset + i];
@@ -245,7 +249,11 @@ static AOM_INLINE void scan_col_mbmi(
       if (ref_mask_row >= sb_mi_size) break;
       const int ref_offset =
           ref_mask_row * xd->is_mi_coded_stride + ref_mask_col;
+#if CONFIG_SDP
+      if (!xd->is_mi_coded[0][ref_offset]) break;
+#else
       if (!xd->is_mi_coded[ref_offset]) break;
+#endif  // CONFIG_SDP
     }
 #endif  // CONFIG_EXT_RECUR_PARTITIONS
     const MB_MODE_INFO *const candidate =
