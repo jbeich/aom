@@ -3814,6 +3814,14 @@ static void rectangular_partition_search(
           PRUNE_WITH_PREV_PARTITION(PARTITION_HORZ)) {
         continue;
       }
+      const int num_planes = av1_num_planes(cm);
+      for (int idx = 0; idx < NUM_RECT_PARTS; idx++) {
+        if (pc_tree->horizontal[idx]) {
+          av1_free_pc_tree_recursive(pc_tree->horizontal[idx], num_planes, 0,
+                                     0);
+          pc_tree->horizontal[idx] = NULL;
+        }
+      }
       pc_tree->horizontal[0] = av1_alloc_pc_tree_node(
           blk_params.mi_row, blk_params.mi_col, blk_params.subsize, pc_tree,
           PARTITION_HORZ, 0, 0, ss_x, ss_y);
@@ -3931,6 +3939,14 @@ static void rectangular_partition_search(
       if (should_reuse_mode(x, REUSE_PARTITION_MODE_FLAG) &&
           PRUNE_WITH_PREV_PARTITION(PARTITION_VERT)) {
         continue;
+      }
+
+      const int num_planes = av1_num_planes(cm);
+      for (int idx = 0; idx < NUM_RECT_PARTS; idx++) {
+        if (pc_tree->vertical[idx]) {
+          av1_free_pc_tree_recursive(pc_tree->vertical[idx], num_planes, 0, 0);
+          pc_tree->vertical[idx] = NULL;
+        }
       }
       pc_tree->vertical[0] = av1_alloc_pc_tree_node(
           blk_params.mi_row, blk_params.mi_col, blk_params.subsize, pc_tree,
@@ -5083,6 +5099,12 @@ static INLINE void search_partition_horz_3(PartitionSearchState *search_state,
   const BLOCK_SIZE subblock_sizes[3] = { sml_subsize, big_subsize,
                                          sml_subsize };
 
+  for (int idx = 0; idx < 3; idx++) {
+    if (pc_tree->horizontal3[idx]) {
+      av1_free_pc_tree_recursive(pc_tree->horizontal3[idx], num_planes, 0, 0);
+      pc_tree->horizontal3[idx] = NULL;
+    }
+  }
   pc_tree->horizontal3[0] =
       av1_alloc_pc_tree_node(mi_row, mi_col, subblock_sizes[0], pc_tree,
                              PARTITION_HORZ_3, 0, 0, ss_x, ss_y);
@@ -5233,6 +5255,12 @@ static INLINE void search_partition_vert_3(PartitionSearchState *search_state,
   const BLOCK_SIZE subblock_sizes[3] = { sml_subsize, big_subsize,
                                          sml_subsize };
 
+  for (int idx = 0; idx < 3; idx++) {
+    if (pc_tree->vertical3[idx]) {
+      av1_free_pc_tree_recursive(pc_tree->vertical3[idx], num_planes, 0, 0);
+      pc_tree->vertical3[idx] = NULL;
+    }
+  }
   pc_tree->vertical3[0] =
       av1_alloc_pc_tree_node(mi_row, mi_col, subblock_sizes[0], pc_tree,
                              PARTITION_VERT_3, 0, 0, ss_x, ss_y);
