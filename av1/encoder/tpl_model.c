@@ -769,6 +769,12 @@ static AOM_INLINE void init_mc_flow_dispenser(AV1_COMP *cpi, int frame_idx,
   tpl_reset_src_ref_frames(tpl_data);
   av1_tile_init(&xd->tile, cm, 0, 0);
 
+  // TODO(any): The tiles are not being set correctly by av1_tile_init above as
+  // it always assumes the first tile is used. We set the tile size here as a
+  // hack.
+  xd->tile.mi_row_end = cm->mi_params.mi_rows;
+  xd->tile.mi_col_end = cm->mi_params.mi_cols;
+
   // Setup scaling factor
   av1_setup_scale_factors_for_frame(
       &tpl_data->sf, this_frame->y_crop_width, this_frame->y_crop_height,
