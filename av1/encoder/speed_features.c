@@ -364,6 +364,8 @@ static void set_good_speed_features_framesize_independent(
   sf->part_sf.enable_fast_erp = 0;
   sf->part_sf.ml_prune_4_partition = 0;
   sf->part_sf.ml_prune_ab_partition = 0;
+
+  sf->part_sf.prune_part_3_with_part_none = 0;
 #else   // CONFIG_EXT_RECUR_PARTITIONS
   sf->part_sf.ml_prune_4_partition = 1;
   sf->part_sf.ml_prune_ab_partition = 1;
@@ -1082,6 +1084,7 @@ static AOM_INLINE void init_part_sf(PARTITION_SPEED_FEATURES *part_sf) {
   part_sf->early_term_after_none_split = 0;
 #if CONFIG_EXT_RECUR_PARTITIONS
   part_sf->enable_fast_erp = 0;
+  part_sf->prune_part_3_with_part_none = 0;
 #endif  // CONFIG_EXT_RECUR_PARTITIONS
 }
 

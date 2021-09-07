@@ -5813,7 +5813,10 @@ BEGIN_PARTITION_SEARCH:
                                  part_search_state.ss_x, part_search_state.ss_y,
                                  pc_tree) &&
       is_bsize_geq(get_partition_subsize(bsize, PARTITION_HORZ_3),
-                   blk_params.min_partition_size);
+                   blk_params.min_partition_size) &&
+      IMPLIES(cpi->sf.part_sf.prune_part_3_with_part_none,
+              frame_is_intra_only(cm) || prev_partition == PARTITION_HORZ_3 ||
+                  pc_tree->partitioning != PARTITION_NONE);
 
   const int vert_3_allowed =
       partition_3_allowed && (is_square_block(bsize) || is_wide_block) &&
@@ -5824,7 +5827,10 @@ BEGIN_PARTITION_SEARCH:
                                  part_search_state.ss_x, part_search_state.ss_y,
                                  pc_tree) &&
       is_bsize_geq(get_partition_subsize(bsize, PARTITION_VERT_3),
-                   blk_params.min_partition_size);
+                   blk_params.min_partition_size) &&
+      IMPLIES(cpi->sf.part_sf.prune_part_3_with_part_none,
+              frame_is_intra_only(cm) || prev_partition == PARTITION_VERT_3 ||
+                  pc_tree->partitioning != PARTITION_NONE);
 
   // PARTITION_HORZ_3
   if (IMPLIES(should_reuse_mode(x, REUSE_PARTITION_MODE_FLAG),

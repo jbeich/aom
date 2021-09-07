@@ -508,6 +508,9 @@ typedef struct PARTITION_SPEED_FEATURES {
 
 #if CONFIG_EXT_RECUR_PARTITIONS
   int enable_fast_erp;
+
+  // Prunes PARTITION_3 if PARTITION_NONE is used instead of PARTITION_HORZ|VERT
+  int prune_part_3_with_part_none;
 #endif  // CONFIG_EXT_RECUR_PARTITIONS
 } PARTITION_SPEED_FEATURES;
 
@@ -761,6 +764,9 @@ typedef struct INTER_MODE_SPEED_FEATURES {
   int disable_masked_comp;
 
 #if CONFIG_EXT_RECUR_PARTITIONS
+  // Under ERP, determines whether to reuse partition mode and prediction mode
+  // if a block with the same (mi_row, mi_col, bsize) is visited more than one
+  // by the encoder.
   int reuse_erp_mode_flag;
 #endif  // CONFIG_EXT_RECUR_PARTITIONS
 } INTER_MODE_SPEED_FEATURES;
