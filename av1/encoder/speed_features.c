@@ -375,12 +375,9 @@ static void set_good_speed_features_framesize_independent(
   sf->part_sf.simple_motion_search_prune_rect = 1;
 
 #if CONFIG_EXT_RECUR_PARTITIONS
-  sf->inter_sf.reuse_erp_mode_flag = 0;
-  /*
-  sf->inter_sf.reuse_erp_mode_flag = (REUSE_PARTITION_MODE_FLAG |
-                                      REUSE_INTER_MODE_IN_INTERFRAME_FLAG |
-                                      REUSE_INTRA_MODE_IN_INTERFRAME_FLAG);
-                                      */
+  sf->inter_sf.reuse_erp_mode_flag =
+      (REUSE_PARTITION_MODE_FLAG | REUSE_INTER_MODE_IN_INTERFRAME_FLAG |
+       REUSE_INTRA_MODE_IN_INTERFRAME_FLAG);
 #endif  // CONFIG_EXT_RECUR_PARTITIONS
   sf->inter_sf.disable_wedge_search_var_thresh = 0;
   // TODO(debargha): Test, tweak and turn on either 1 or 2
