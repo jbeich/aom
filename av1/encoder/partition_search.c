@@ -3657,6 +3657,8 @@ static AOM_INLINE void reset_part_limitations(
 #endif  // CONFIG_EXT_RECUR_PARTITIONS
 }
 
+static const int rect_partition_type[NUM_RECT_PARTS] = { PARTITION_HORZ,
+                                                         PARTITION_VERT };
 #if !CONFIG_EXT_RECUR_PARTITIONS
 // Rectangular partitions evaluation at sub-block level.
 static void rd_pick_rect_partition(AV1_COMP *const cpi, TileDataEnc *tile_data,
@@ -3691,6 +3693,73 @@ static void rd_pick_rect_partition(AV1_COMP *const cpi, TileDataEnc *tile_data,
   part_search_state->rect_part_rd[rect_part][idx] =
       part_search_state->this_rdc.rdcost;
 }
+#else
+static void rd_pick_rect_partition(
+    AV1_COMP *const cpi, ThreadData *td, TileDataEnc *tile_data,
+    TokenExtra **tp, MACROBLOCK *x, PC_TREE *pc_tree,
+    PartitionSearchState *part_search_state, RD_STATS *best_rdc,
+    RECT_PART_TYPE rect_type,
+    const int mi_pos_rect[NUM_RECT_PARTS][SUB_PARTITIONS_RECT][2],
+    BLOCK_SIZE bsize, const int is_not_edge_block[NUM_RECT_PARTS],
+    SB_MULTI_PASS_MODE multi_pass_mode
+#if CONFIG_SDP
+    ,
+    const PARTITION_TREE *ptree_luma
+#endif  // CONFIG_SDP
+) {
+  const PARTITION_TYPE partition_type = rect_partition_type[rect_type];
+  RD_STATS *sum_rdc = &part_search_state->sum_rdc;
+
+  sum_rdc->rate = part_search_state->partition_cost[partition_type];
+  sum_rdc->rdcost = RDCOST(x->rdmult, sum_rdc->rate, 0);
+
+  RD_STATS this_rdc;
+  RD_STATS best_remain_rdcost;
+  PC_TREE **sub_tree =
+      (rect_type == HORZ) ? pc_tree->horizontal : pc_tree->vertical;
+#if CONFIG_SDP
+  const int track_ptree_luma =
+      ptree_luma && ptree_luma->partition == partition_type;
+#endif  // CONFIG_SDP
+  av1_rd_stats_subtraction(x->rdmult, best_rdc, sum_rdc, &best_remain_rdcost);
+  av1_rd_pick_partition(cpi, td, tile_data, tp, mi_pos_rect[rect_type][0][0],
+                        mi_pos_rect[rect_type][0][1], bsize, &this_rdc,
+                        best_remain_rdcost, sub_tree[0],
+#if CONFIG_SDP
+                        track_ptree_luma ? ptree_luma->sub_tree[0] : NULL,
+#endif  // CONFIG_SDP
+                        NULL, NULL, multi_pass_mode, NULL);
+  av1_rd_cost_update(x->rdmult, &this_rdc);
+  if (this_rdc.rate == INT_MAX) {
+    sum_rdc->rdcost = INT64_MAX;
+  } else {
+    sum_rdc->rate += this_rdc.rate;
+    sum_rdc->dist += this_rdc.dist;
+    av1_rd_cost_update(x->rdmult, sum_rdc);
+  }
+  part_search_state->rect_part_rd[rect_type][0] = this_rdc.rdcost;
+
+  if (sum_rdc->rdcost < best_rdc->rdcost && is_not_edge_block[rect_type]) {
+    av1_rd_stats_subtraction(x->rdmult, best_rdc, sum_rdc, &best_remain_rdcost);
+    av1_rd_pick_partition(cpi, td, tile_data, tp, mi_pos_rect[rect_type][1][0],
+                          mi_pos_rect[rect_type][1][1], bsize, &this_rdc,
+                          best_remain_rdcost, sub_tree[1],
+#if CONFIG_SDP
+                          track_ptree_luma ? ptree_luma->sub_tree[1] : NULL,
+#endif  // CONFIG_SDP
+                          NULL, NULL, multi_pass_mode, NULL);
+    av1_rd_cost_update(x->rdmult, &this_rdc);
+    part_search_state->rect_part_rd[rect_type][1] = this_rdc.rdcost;
+
+    if (this_rdc.rate == INT_MAX) {
+      sum_rdc->rdcost = INT64_MAX;
+    } else {
+      sum_rdc->rate += this_rdc.rate;
+      sum_rdc->dist += this_rdc.dist;
+      av1_rd_cost_update(x->rdmult, sum_rdc);
+    }
+  }
+}
 #endif
 
 typedef int (*active_edge_info)(const AV1_COMP *cpi, int mi_col, int mi_step);
@@ -3703,10 +3772,6 @@ static AOM_INLINE int is_rect_part_allowed(
     const AV1_COMP *cpi, PartitionSearchState *part_search_state,
     active_edge_info *active_edge, RECT_PART_TYPE rect_part, const int mi_pos) {
   PartitionBlkParams blk_params = part_search_state->part_blk_params;
-#if CONFIG_EXT_RECUR_PARTITIONS
-  const int rect_partition_type[NUM_RECT_PARTS] = { PARTITION_HORZ,
-                                                    PARTITION_VERT };
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
   const int is_part_allowed =
       (!part_search_state->terminate_partition_search &&
        part_search_state->partition_rect_allowed[rect_part] &&
@@ -3753,8 +3818,6 @@ static void rectangular_partition_search(
       cpi, x, blk_params.mi_row, blk_params.mi_col, blk_params.bsize);
 #endif  // CONFIG_EXT_RECUR_PARTITIONS
   RD_STATS *sum_rdc = &part_search_state->sum_rdc;
-  const int rect_partition_type[NUM_RECT_PARTS] = { PARTITION_HORZ,
-                                                    PARTITION_VERT };
 
   // mi_pos_rect[NUM_RECT_PARTS][SUB_PARTITIONS_RECT][0]: mi_row postion of
   //                                           HORZ and VERT partition types.
@@ -3772,10 +3835,10 @@ static void rectangular_partition_search(
   active_edge_info active_edge_type[NUM_RECT_PARTS] = { av1_active_h_edge,
                                                         av1_active_v_edge };
 
-#if !CONFIG_EXT_RECUR_PARTITIONS
   // Indicates edge blocks for HORZ and VERT partition types.
   const int is_not_edge_block[NUM_RECT_PARTS] = { blk_params.has_rows,
                                                   blk_params.has_cols };
+#if !CONFIG_EXT_RECUR_PARTITIONS
 
   // Initialize pc tree context for HORZ and VERT partition types.
   PICK_MODE_CONTEXT **cur_ctx[NUM_RECT_PARTS][SUB_PARTITIONS_RECT] = {
@@ -3795,7 +3858,7 @@ static void rectangular_partition_search(
       continue;
 
     // Sub-partition idx.
-    PARTITION_TYPE partition_type = rect_partition_type[i];
+    const PARTITION_TYPE partition_type = rect_partition_type[i];
     blk_params.subsize =
         get_partition_subsize(blk_params.bsize, partition_type);
     const int part_hv_rate = part_search_state->partition_cost[partition_type];
@@ -3808,165 +3871,46 @@ static void rectangular_partition_search(
 #endif  // !CONFIG_EXT_RECUR_PARTITIONS
     av1_init_rd_stats(sum_rdc);
 #if CONFIG_EXT_RECUR_PARTITIONS
-    RD_STATS this_rdc;
-    if (i == HORZ) {
-      if (should_reuse_mode(x, REUSE_PARTITION_MODE_FLAG) &&
-          PRUNE_WITH_PREV_PARTITION(PARTITION_HORZ)) {
+    if (should_reuse_mode(x, REUSE_PARTITION_MODE_FLAG) &&
+        PRUNE_WITH_PREV_PARTITION(partition_type)) {
+      continue;
+    }
+
+    if (cpi->sf.part_sf.enable_fast_erp && !frame_is_intra_only(cm) &&
+        !x->must_find_valid_partition &&
+        is_bsize_pruning_cand(blk_params.bsize)) {
+      if (av1_prune_part_hv_with_sms(cpi, tile_data, x, part_search_state,
+                                     best_rdc, &blk_params, i, part_hv_rate)) {
         continue;
-      }
-      const int num_planes = av1_num_planes(cm);
-      for (int idx = 0; idx < NUM_RECT_PARTS; idx++) {
-        if (pc_tree->horizontal[idx]) {
-          av1_free_pc_tree_recursive(pc_tree->horizontal[idx], num_planes, 0,
-                                     0);
-          pc_tree->horizontal[idx] = NULL;
-        }
-      }
-      pc_tree->horizontal[0] = av1_alloc_pc_tree_node(
-          blk_params.mi_row, blk_params.mi_col, blk_params.subsize, pc_tree,
-          PARTITION_HORZ, 0, 0, ss_x, ss_y);
-      pc_tree->horizontal[1] = av1_alloc_pc_tree_node(
-          blk_params.mi_row + blk_params.mi_step_h, blk_params.mi_col,
-          blk_params.subsize, pc_tree, PARTITION_HORZ, 1, 1, ss_x, ss_y);
-
-      if (cpi->sf.part_sf.enable_fast_erp && !frame_is_intra_only(cm) &&
-          !x->must_find_valid_partition &&
-          is_bsize_pruning_cand(blk_params.bsize)) {
-        if (av1_prune_part_hv_with_sms(cpi, tile_data, x, part_search_state,
-                                       best_rdc, &blk_params, i,
-                                       part_hv_rate)) {
-          continue;
-        }
-      }
-
-      sum_rdc->rate = part_search_state->partition_cost[PARTITION_HORZ];
-      sum_rdc->rdcost = RDCOST(x->rdmult, sum_rdc->rate, 0);
-      RD_STATS best_remain_rdcost;
-#if CONFIG_SDP
-      const int track_ptree_luma =
-          ptree_luma && ptree_luma->partition == PARTITION_HORZ;
-#endif  // CONFIG_SDP
-      av1_rd_stats_subtraction(x->rdmult, best_rdc, sum_rdc,
-                               &best_remain_rdcost);
-      av1_rd_pick_partition(cpi, td, tile_data, tp, blk_params.mi_row,
-                            blk_params.mi_col, blk_params.subsize, &this_rdc,
-                            best_remain_rdcost, pc_tree->horizontal[0],
-#if CONFIG_SDP
-                            track_ptree_luma ? ptree_luma->sub_tree[0] : NULL,
-#endif  // CONFIG_SDP
-                            NULL, NULL, multi_pass_mode, NULL);
-      av1_rd_cost_update(x->rdmult, &this_rdc);
-      if (this_rdc.rate == INT_MAX) {
-        sum_rdc->rdcost = INT64_MAX;
-      } else {
-        sum_rdc->rate += this_rdc.rate;
-        sum_rdc->dist += this_rdc.dist;
-        av1_rd_cost_update(x->rdmult, sum_rdc);
-      }
-      part_search_state->rect_part_rd[HORZ][0] = this_rdc.rdcost;
-
-      if (sum_rdc->rdcost < best_rdc->rdcost && blk_params.has_rows) {
-        av1_rd_stats_subtraction(x->rdmult, best_rdc, sum_rdc,
-                                 &best_remain_rdcost);
-        av1_rd_pick_partition(cpi, td, tile_data, tp,
-                              blk_params.mi_row + blk_params.mi_step_h,
-                              blk_params.mi_col, blk_params.subsize, &this_rdc,
-                              best_remain_rdcost, pc_tree->horizontal[1],
-#if CONFIG_SDP
-                              track_ptree_luma ? ptree_luma->sub_tree[1] : NULL,
-#endif  // CONFIG_SDP
-                              NULL, NULL, multi_pass_mode, NULL);
-        av1_rd_cost_update(x->rdmult, &this_rdc);
-        part_search_state->rect_part_rd[HORZ][1] = this_rdc.rdcost;
-
-        if (this_rdc.rate == INT_MAX) {
-          sum_rdc->rdcost = INT64_MAX;
-        } else {
-          sum_rdc->rate += this_rdc.rate;
-          sum_rdc->dist += this_rdc.dist;
-          av1_rd_cost_update(x->rdmult, sum_rdc);
-        }
-      }
-    } else if (i == VERT) {
-      if (should_reuse_mode(x, REUSE_PARTITION_MODE_FLAG) &&
-          PRUNE_WITH_PREV_PARTITION(PARTITION_VERT)) {
-        continue;
-      }
-
-      const int num_planes = av1_num_planes(cm);
-      for (int idx = 0; idx < NUM_RECT_PARTS; idx++) {
-        if (pc_tree->vertical[idx]) {
-          av1_free_pc_tree_recursive(pc_tree->vertical[idx], num_planes, 0, 0);
-          pc_tree->vertical[idx] = NULL;
-        }
-      }
-      pc_tree->vertical[0] = av1_alloc_pc_tree_node(
-          blk_params.mi_row, blk_params.mi_col, blk_params.subsize, pc_tree,
-          PARTITION_VERT, 0, 0, ss_x, ss_y);
-      pc_tree->vertical[1] = av1_alloc_pc_tree_node(
-          blk_params.mi_row, blk_params.mi_col + blk_params.mi_step_w,
-          blk_params.subsize, pc_tree, PARTITION_VERT, 1, 1, ss_x, ss_y);
-
-      if (cpi->sf.part_sf.enable_fast_erp && !frame_is_intra_only(cm) &&
-          !x->must_find_valid_partition &&
-          is_bsize_pruning_cand(blk_params.bsize)) {
-        if (av1_prune_part_hv_with_sms(cpi, tile_data, x, part_search_state,
-                                       best_rdc, &blk_params, i,
-                                       part_hv_rate)) {
-          continue;
-        }
-      }
-
-      sum_rdc->rate = part_search_state->partition_cost[PARTITION_VERT];
-      sum_rdc->rdcost = RDCOST(x->rdmult, sum_rdc->rate, 0);
-      RD_STATS best_remain_rdcost;
-#if CONFIG_SDP
-      const int track_ptree_luma =
-          ptree_luma && ptree_luma->partition == PARTITION_VERT;
-#endif  // CONFIG_SDP
-      av1_rd_stats_subtraction(x->rdmult, best_rdc, sum_rdc,
-                               &best_remain_rdcost);
-      av1_rd_pick_partition(cpi, td, tile_data, tp, blk_params.mi_row,
-                            blk_params.mi_col, blk_params.subsize, &this_rdc,
-                            best_remain_rdcost, pc_tree->vertical[0],
-#if CONFIG_SDP
-                            track_ptree_luma ? ptree_luma->sub_tree[0] : NULL,
-#endif  // CONFIG_SDP
-                            NULL, NULL, multi_pass_mode, NULL);
-
-      av1_rd_cost_update(x->rdmult, &this_rdc);
-
-      if (this_rdc.rate == INT_MAX) {
-        sum_rdc->rdcost = INT64_MAX;
-      } else {
-        sum_rdc->rate += this_rdc.rate;
-        sum_rdc->dist += this_rdc.dist;
-        av1_rd_cost_update(x->rdmult, sum_rdc);
-      }
-      part_search_state->rect_part_rd[VERT][0] = this_rdc.rdcost;
-      if (sum_rdc->rdcost < best_rdc->rdcost && blk_params.has_cols) {
-        av1_rd_stats_subtraction(x->rdmult, best_rdc, sum_rdc,
-                                 &best_remain_rdcost);
-        av1_rd_pick_partition(cpi, td, tile_data, tp, blk_params.mi_row,
-                              blk_params.mi_col + blk_params.mi_step_w,
-                              blk_params.subsize, &this_rdc, best_remain_rdcost,
-                              pc_tree->vertical[1],
-#if CONFIG_SDP
-                              track_ptree_luma ? ptree_luma->sub_tree[1] : NULL,
-#endif  // CONFIG_SDP
-                              NULL, NULL, multi_pass_mode, NULL);
-        av1_rd_cost_update(x->rdmult, &this_rdc);
-        part_search_state->rect_part_rd[VERT][1] = this_rdc.rdcost;
-
-        if (this_rdc.rate == INT_MAX) {
-          sum_rdc->rdcost = INT64_MAX;
-        } else {
-          sum_rdc->rate += this_rdc.rate;
-          sum_rdc->dist += this_rdc.dist;
-          av1_rd_cost_update(x->rdmult, sum_rdc);
-        }
       }
     }
+
+    PC_TREE **sub_tree = (i == HORZ) ? pc_tree->horizontal : pc_tree->vertical;
+
+    const int num_planes = av1_num_planes(cm);
+    for (int idx = 0; idx < SUB_PARTITIONS_RECT; idx++) {
+      if (sub_tree[idx]) {
+        av1_free_pc_tree_recursive(sub_tree[idx], num_planes, 0, 0);
+        sub_tree[idx] = NULL;
+      }
+    }
+    sub_tree[0] = av1_alloc_pc_tree_node(
+        mi_pos_rect[i][0][0], mi_pos_rect[i][0][1], blk_params.subsize, pc_tree,
+        partition_type, 0, 0, ss_x, ss_y);
+    sub_tree[1] = av1_alloc_pc_tree_node(
+        mi_pos_rect[i][1][0], mi_pos_rect[i][1][1], blk_params.subsize, pc_tree,
+        partition_type, 1, 1, ss_x, ss_y);
+
+#if CONFIG_SDP
+    rd_pick_rect_partition(cpi, td, tile_data, tp, x, pc_tree,
+                           part_search_state, best_rdc, i, mi_pos_rect,
+                           blk_params.subsize, is_not_edge_block,
+                           multi_pass_mode, ptree_luma);
+#else
+    rd_pick_rect_partition(
+        cpi, td, tile_data, tp, x, pc_tree, part_search_state, best_rdc, i,
+        mi_pos_rect, blk_params.subsize, is_not_edge_block, multi_pass_mode);
+#endif  // CONFIG_SDP
 #else
     int sub_part_idx = 0;
     for (int j = 0; j < SUB_PARTITIONS_RECT; j++) {
@@ -5528,7 +5472,8 @@ bool av1_rd_pick_partition(AV1_COMP *const cpi, ThreadData *td,
     if (derived_partition_mode != PARTITION_HORZ_3) horz_3_allowed_sdp = 0;
     if (derived_partition_mode != PARTITION_VERT_3) vert_3_allowed_sdp = 0;
 
-    // TODO(yuec): Need to make sure there is at least one valid partition mode
+    // TODO(yuec): Need to make sure there is at least one valid partition
+    // mode
   }
 #else   // CONFIG_EXT_RECUR_PARTITIONS
   const CommonModeInfoParams *const mi_params = &cm->mi_params;
@@ -5869,7 +5814,7 @@ BEGIN_PARTITION_SEARCH:
       encode_sb(cpi, td, tile_data, tp, mi_row, mi_col, run_type, bsize,
                 pc_tree, xd->sbi->ptree_root, NULL);
 #endif  // CONFIG_SDP
-      // Dealloc the whole PC_TREE after a superblock is done.
+        // Dealloc the whole PC_TREE after a superblock is done.
       av1_free_pc_tree_recursive(pc_tree, num_planes, 0, 0);
       pc_tree_dealloc = 1;
     } else {
