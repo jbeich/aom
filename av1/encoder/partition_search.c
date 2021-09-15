@@ -3924,16 +3924,16 @@ static void rectangular_partition_search(
                               track_ptree_luma ? ptree_luma->sub_tree[1] : NULL,
 #endif  // CONFIG_SDP
                               NULL, NULL, multi_pass_mode, NULL);
-      }
-      av1_rd_cost_update(x->rdmult, &this_rdc);
-      part_search_state->rect_part_rd[VERT][1] = this_rdc.rdcost;
+        av1_rd_cost_update(x->rdmult, &this_rdc);
+        part_search_state->rect_part_rd[VERT][1] = this_rdc.rdcost;
 
-      if (this_rdc.rate == INT_MAX) {
-        sum_rdc->rdcost = INT64_MAX;
-      } else {
-        sum_rdc->rate += this_rdc.rate;
-        sum_rdc->dist += this_rdc.dist;
-        av1_rd_cost_update(x->rdmult, sum_rdc);
+        if (this_rdc.rate == INT_MAX) {
+          sum_rdc->rdcost = INT64_MAX;
+        } else {
+          sum_rdc->rate += this_rdc.rate;
+          sum_rdc->dist += this_rdc.dist;
+          av1_rd_cost_update(x->rdmult, sum_rdc);
+        }
       }
     } else if (i == VERT) {
       if (should_reuse_mode(x, REUSE_PARTITION_MODE_FLAG) &&
@@ -4052,16 +4052,16 @@ static void rectangular_partition_search(
                               track_ptree_luma ? ptree_luma->sub_tree[1] : NULL,
 #endif  // CONFIG_SDP
                               NULL, NULL, multi_pass_mode, NULL);
-      }
-      av1_rd_cost_update(x->rdmult, &this_rdc);
-      part_search_state->rect_part_rd[VERT][1] = this_rdc.rdcost;
+        av1_rd_cost_update(x->rdmult, &this_rdc);
+        part_search_state->rect_part_rd[VERT][1] = this_rdc.rdcost;
 
-      if (this_rdc.rate == INT_MAX) {
-        sum_rdc->rdcost = INT64_MAX;
-      } else {
-        sum_rdc->rate += this_rdc.rate;
-        sum_rdc->dist += this_rdc.dist;
-        av1_rd_cost_update(x->rdmult, sum_rdc);
+        if (this_rdc.rate == INT_MAX) {
+          sum_rdc->rdcost = INT64_MAX;
+        } else {
+          sum_rdc->rate += this_rdc.rate;
+          sum_rdc->dist += this_rdc.dist;
+          av1_rd_cost_update(x->rdmult, sum_rdc);
+        }
       }
     }
 #else
