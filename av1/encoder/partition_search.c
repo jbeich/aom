@@ -3832,58 +3832,10 @@ static void rectangular_partition_search(
       if (cpi->sf.part_sf.enable_fast_erp && !frame_is_intra_only(cm) &&
           !x->must_find_valid_partition &&
           is_bsize_pruning_cand(blk_params.bsize)) {
-        SMSPartitionStats part_data;
-        const SimpleMotionData *up =
-            av1_get_sms_data(cpi, &tile_data->tile_info, x, blk_params.mi_row,
-                             blk_params.mi_col, blk_params.subsize);
-        const SimpleMotionData *down =
-            av1_get_sms_data(cpi, &tile_data->tile_info, x,
-                             blk_params.mi_row + blk_params.mi_step_h,
-                             blk_params.mi_col, blk_params.subsize);
-        part_data.sms_data[0] = up;
-        part_data.sms_data[1] = down;
-        part_data.num_sub_parts = 2;
-        part_data.part_rate = part_hv_rate;
-
-        if (best_rdc->rdcost < INT64_MAX &&
-            (blk_params.mi_row + 2 * blk_params.mi_step_h <=
-             cm->mi_params.mi_rows) &&
-            (blk_params.mi_col + 2 * blk_params.mi_step_w <=
-             cm->mi_params.mi_cols) &&
-            av1_prune_new_part(&part_search_state->none_data, &part_data,
-                               x->rdmult, blk_params.bsize, &cpi->sf)) {
-          const BLOCK_SIZE subsubsize =
-              get_partition_subsize(blk_params.subsize, PARTITION_VERT);
-          if (subsubsize == BLOCK_INVALID) {
-            continue;
-          }
-
-          // Do one more check to deal with recursion
-          SMSPartitionStats subpart_data;
-          const SimpleMotionData *upleft =
-              av1_get_sms_data(cpi, &tile_data->tile_info, x, blk_params.mi_row,
-                               blk_params.mi_col, subsubsize);
-          const SimpleMotionData *upright = av1_get_sms_data(
-              cpi, &tile_data->tile_info, x, blk_params.mi_row,
-              blk_params.mi_col + blk_params.mi_step_w, subsubsize);
-          const SimpleMotionData *downleft =
-              av1_get_sms_data(cpi, &tile_data->tile_info, x,
-                               blk_params.mi_row + blk_params.mi_step_h,
-                               blk_params.mi_col, subsubsize);
-          const SimpleMotionData *downright = av1_get_sms_data(
-              cpi, &tile_data->tile_info, x,
-              blk_params.mi_row + blk_params.mi_step_h,
-              blk_params.mi_col + blk_params.mi_step_w, subsubsize);
-          subpart_data.sms_data[0] = upleft;
-          subpart_data.sms_data[1] = upright;
-          subpart_data.sms_data[2] = downleft;
-          subpart_data.sms_data[3] = downright;
-          subpart_data.num_sub_parts = 4;
-          subpart_data.part_rate = 0;
-          if (av1_prune_new_part(&part_search_state->none_data, &subpart_data,
-                                 x->rdmult, blk_params.bsize, &cpi->sf)) {
-            continue;
-          }
+        if (av1_prune_part_hv_with_sms(cpi, tile_data, x, part_search_state,
+                                       best_rdc, &blk_params, i,
+                                       part_hv_rate)) {
+          continue;
         }
       }
 
@@ -3958,59 +3910,10 @@ static void rectangular_partition_search(
       if (cpi->sf.part_sf.enable_fast_erp && !frame_is_intra_only(cm) &&
           !x->must_find_valid_partition &&
           is_bsize_pruning_cand(blk_params.bsize)) {
-        const SimpleMotionData *left =
-            av1_get_sms_data(cpi, &tile_data->tile_info, x, blk_params.mi_row,
-                             blk_params.mi_col, blk_params.subsize);
-        const SimpleMotionData *right = av1_get_sms_data(
-            cpi, &tile_data->tile_info, x, blk_params.mi_row,
-            blk_params.mi_col + blk_params.mi_step_w, blk_params.subsize);
-
-        SMSPartitionStats part_data;
-        part_data.sms_data[0] = left;
-        part_data.sms_data[1] = right;
-        part_data.num_sub_parts = 2;
-        part_data.part_rate = part_hv_rate;
-
-        if (best_rdc->rdcost < INT64_MAX &&
-            (blk_params.mi_row + 2 * blk_params.mi_step_h <=
-             cm->mi_params.mi_rows) &&
-            (blk_params.mi_col + 2 * blk_params.mi_step_w <=
-             cm->mi_params.mi_cols) &&
-            av1_prune_new_part(&part_search_state->none_data, &part_data,
-                               x->rdmult, blk_params.bsize, &cpi->sf)) {
-          const BLOCK_SIZE subsubsize =
-              get_partition_subsize(blk_params.subsize, PARTITION_HORZ);
-          if (subsubsize == BLOCK_INVALID) {
-            continue;
-          }
-
-          // Do one more check to deal with recursion
-
-          SMSPartitionStats subpart_data;
-          const SimpleMotionData *upleft =
-              av1_get_sms_data(cpi, &tile_data->tile_info, x, blk_params.mi_row,
-                               blk_params.mi_col, subsubsize);
-          const SimpleMotionData *upright = av1_get_sms_data(
-              cpi, &tile_data->tile_info, x, blk_params.mi_row,
-              blk_params.mi_col + blk_params.mi_step_w, subsubsize);
-          const SimpleMotionData *downleft =
-              av1_get_sms_data(cpi, &tile_data->tile_info, x,
-                               blk_params.mi_row + blk_params.mi_step_h,
-                               blk_params.mi_col, subsubsize);
-          const SimpleMotionData *downright = av1_get_sms_data(
-              cpi, &tile_data->tile_info, x,
-              blk_params.mi_row + blk_params.mi_step_h,
-              blk_params.mi_col + blk_params.mi_step_w, subsubsize);
-          subpart_data.sms_data[0] = upleft;
-          subpart_data.sms_data[1] = upright;
-          subpart_data.sms_data[2] = downleft;
-          subpart_data.sms_data[3] = downright;
-          subpart_data.num_sub_parts = 4;
-          subpart_data.part_rate = 0;
-          if (av1_prune_new_part(&part_search_state->none_data, &subpart_data,
-                                 x->rdmult, blk_params.bsize, &cpi->sf)) {
-            continue;
-          }
+        if (av1_prune_part_hv_with_sms(cpi, tile_data, x, part_search_state,
+                                       best_rdc, &blk_params, i,
+                                       part_hv_rate)) {
+          continue;
         }
       }
 

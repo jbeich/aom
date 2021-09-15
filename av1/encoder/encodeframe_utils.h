@@ -66,7 +66,7 @@ typedef struct SB_FIRST_PASS_STATS {
 
 // This structure contains block size related
 // variables for use in rd_pick_partition().
-typedef struct {
+typedef struct PartitionBlkParams {
   // Half of block width to determine block edge.
   int mi_step;
 #if CONFIG_EXT_RECUR_PARTITIONS
@@ -113,7 +113,7 @@ typedef struct {
 } PartitionBlkParams;
 
 // Structure holding state variables for partition search.
-typedef struct {
+typedef struct PartitionSearchState {
   // Intra partitioning related info.
   PartitionSearchInfo *intra_part_info;
 

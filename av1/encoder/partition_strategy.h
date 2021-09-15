@@ -245,6 +245,14 @@ void av1_copy_sms_part(const SimpleMotionData **part_dst, int *part_size_dst,
                        int *part_rate_dst,
                        const SimpleMotionData *const *part_src,
                        int part_size_src, int part_rate_src);
+
+struct PartitionBlkParams;
+struct PartitionSearchState;
+bool av1_prune_part_hv_with_sms(
+    AV1_COMP *const cpi, TileDataEnc *tile_data, MACROBLOCK *x,
+    const struct PartitionSearchState *part_search_state,
+    const RD_STATS *best_rdc, const struct PartitionBlkParams *blk_params,
+    RECT_PART_TYPE rect_type, int part_rate);
 #endif  // CONFIG_EXT_RECUR_PARTITIONS
 
 // A simplified version of set_offsets meant to be used for
