@@ -3925,7 +3925,7 @@ static void rectangular_partition_search(
 #endif  // CONFIG_SDP
                               NULL, NULL, multi_pass_mode, NULL);
         av1_rd_cost_update(x->rdmult, &this_rdc);
-        part_search_state->rect_part_rd[VERT][1] = this_rdc.rdcost;
+        part_search_state->rect_part_rd[HORZ][1] = this_rdc.rdcost;
 
         if (this_rdc.rate == INT_MAX) {
           sum_rdc->rdcost = INT64_MAX;
