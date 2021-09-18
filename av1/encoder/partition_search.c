@@ -3722,16 +3722,18 @@ static void rd_pick_rect_partition(
       ptree_luma && ptree_luma->partition == partition_type;
 #endif  // CONFIG_SDP
   av1_rd_stats_subtraction(x->rdmult, best_rdc, sum_rdc, &best_remain_rdcost);
-  av1_rd_pick_partition(cpi, td, tile_data, tp, mi_pos_rect[rect_type][0][0],
-                        mi_pos_rect[rect_type][0][1], bsize, &this_rdc,
-                        best_remain_rdcost, sub_tree[0],
+  bool partition_found = av1_rd_pick_partition(
+      cpi, td, tile_data, tp, mi_pos_rect[rect_type][0][0],
+      mi_pos_rect[rect_type][0][1], bsize, &this_rdc, best_remain_rdcost,
+      sub_tree[0],
 #if CONFIG_SDP
-                        track_ptree_luma ? ptree_luma->sub_tree[0] : NULL,
+      track_ptree_luma ? ptree_luma->sub_tree[0] : NULL,
 #endif  // CONFIG_SDP
-                        NULL, NULL, multi_pass_mode, NULL);
+      NULL, NULL, multi_pass_mode, NULL);
   av1_rd_cost_update(x->rdmult, &this_rdc);
-  if (this_rdc.rate == INT_MAX) {
-    sum_rdc->rdcost = INT64_MAX;
+  if (!partition_found) {
+    av1_invalid_rd_stats(sum_rdc);
+    return;
   } else {
     sum_rdc->rate += this_rdc.rate;
     sum_rdc->dist += this_rdc.dist;
@@ -3741,18 +3743,20 @@ static void rd_pick_rect_partition(
 
   if (sum_rdc->rdcost < best_rdc->rdcost && is_not_edge_block[rect_type]) {
     av1_rd_stats_subtraction(x->rdmult, best_rdc, sum_rdc, &best_remain_rdcost);
-    av1_rd_pick_partition(cpi, td, tile_data, tp, mi_pos_rect[rect_type][1][0],
-                          mi_pos_rect[rect_type][1][1], bsize, &this_rdc,
-                          best_remain_rdcost, sub_tree[1],
+    partition_found = av1_rd_pick_partition(
+        cpi, td, tile_data, tp, mi_pos_rect[rect_type][1][0],
+        mi_pos_rect[rect_type][1][1], bsize, &this_rdc, best_remain_rdcost,
+        sub_tree[1],
 #if CONFIG_SDP
-                          track_ptree_luma ? ptree_luma->sub_tree[1] : NULL,
+        track_ptree_luma ? ptree_luma->sub_tree[1] : NULL,
 #endif  // CONFIG_SDP
-                          NULL, NULL, multi_pass_mode, NULL);
+        NULL, NULL, multi_pass_mode, NULL);
     av1_rd_cost_update(x->rdmult, &this_rdc);
     part_search_state->rect_part_rd[rect_type][1] = this_rdc.rdcost;
 
-    if (this_rdc.rate == INT_MAX) {
-      sum_rdc->rdcost = INT64_MAX;
+    if (!partition_found) {
+      av1_invalid_rd_stats(sum_rdc);
+      return;
     } else {
       sum_rdc->rate += this_rdc.rate;
       sum_rdc->dist += this_rdc.dist;
@@ -4857,8 +4861,11 @@ static int rd_try_subblock_new(AV1_COMP *const cpi, ThreadData *td,
 #if CONFIG_SDP
                                rdo_data->ptree_luma,
 #endif  // CONFIG_SDP
-                               rdo_data->sms_tree, NULL, multi_pass_mode, NULL))
+                               rdo_data->sms_tree, NULL, multi_pass_mode,
+                               NULL)) {
+      av1_invalid_rd_stats(sum_rdc);
       return 0;
+    }
   } else {
     const BLOCK_SIZE sb_size = cpi->common.seq_params.sb_size;
     SimpleMotionData *sms_data =
