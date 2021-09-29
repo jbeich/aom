@@ -1402,7 +1402,14 @@ void av1_prune_partitions_by_max_min_bsize(
   const int bsize_1d = block_size_wide[bsize];
   assert(min_partition_size_1d <= max_partition_size_1d);
   const int is_le_min_sq_part = bsize_1d <= min_partition_size_1d;
+#if CONFIG_EXT_RECUR_PARTITIONS
+  const int block_height = block_size_high[bsize];
+  const int block_width = block_size_wide[bsize];
+  const int is_gt_max_sq_part = (block_height > max_partition_size_1d) ||
+                                (block_width > max_partition_size_1d);
+#else   // CONFIG_EXT_RECUR_PARTITIONS
   const int is_gt_max_sq_part = bsize_1d > max_partition_size_1d;
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
 
 #if CONFIG_EXT_RECUR_PARTITIONS
   (void)do_square_split;

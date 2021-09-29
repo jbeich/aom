@@ -1275,7 +1275,6 @@ static void av1_disable_ml_based_partition_sf(
   part_sf->ml_prune_ab_partition = 0;
   part_sf->ml_prune_rect_partition = 0;
   part_sf->ml_early_term_after_part_split_level = 0;
-  part_sf->auto_max_partition_based_on_simple_motion = NOT_IN_USE;
   part_sf->intra_cnn_split = 0;
   part_sf->simple_motion_search_split = 0;
   part_sf->simple_motion_search_prune_rect = 0;
