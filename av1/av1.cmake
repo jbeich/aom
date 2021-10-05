@@ -96,6 +96,13 @@ if(CONFIG_LPF_MASK)
   list(APPEND AOM_AV1_COMMON_SOURCES "${AOM_ROOT}/av1/common/loopfiltermask.c")
 endif()
 
+if(CONFIG_CCSO)
+  list(APPEND AOM_AV1_COMMON_SOURCES "${AOM_ROOT}/av1/common/ccso.c"
+              "${AOM_ROOT}/av1/common/ccso.h")
+  list(APPEND AOM_AV1_ENCODER_SOURCES "${AOM_ROOT}/av1/encoder/pickccso.c"
+              "${AOM_ROOT}/av1/encoder/pickccso.h")
+endif()
+
 list(APPEND AOM_AV1_DECODER_SOURCES
             "${AOM_ROOT}/av1/av1_dx_iface.c"
             "${AOM_ROOT}/av1/decoder/decodeframe.c"
@@ -215,7 +222,6 @@ list(APPEND AOM_AV1_ENCODER_SOURCES
             "${AOM_ROOT}/av1/encoder/rd.c"
             "${AOM_ROOT}/av1/encoder/rd.h"
             "${AOM_ROOT}/av1/encoder/rdopt.c"
-            "${AOM_ROOT}/av1/encoder/nonrd_pickmode.c"
             "${AOM_ROOT}/av1/encoder/rdopt.h"
             "${AOM_ROOT}/av1/encoder/rdopt_data_defs.h"
             "${AOM_ROOT}/av1/encoder/rdopt_utils.h"
@@ -243,8 +249,6 @@ list(APPEND AOM_AV1_ENCODER_SOURCES
             "${AOM_ROOT}/av1/encoder/intra_mode_search.h"
             "${AOM_ROOT}/av1/encoder/intra_mode_search_utils.h"
             "${AOM_ROOT}/av1/encoder/wedge_utils.c"
-            "${AOM_ROOT}/av1/encoder/var_based_part.c"
-            "${AOM_ROOT}/av1/encoder/var_based_part.h"
             "${AOM_ROOT}/av1/encoder/av1_noise_estimate.c"
             "${AOM_ROOT}/av1/encoder/av1_noise_estimate.h"
             "${AOM_ROOT}/third_party/fastfeat/fast.c"
@@ -418,24 +422,6 @@ endif()
 
 if(CONFIG_INTERNAL_STATS)
   list(APPEND AOM_AV1_ENCODER_SOURCES "${AOM_ROOT}/av1/encoder/blockiness.c")
-endif()
-
-if(CONFIG_REALTIME_ONLY)
-  list(REMOVE_ITEM AOM_AV1_ENCODER_SOURCES
-                   "${AOM_ROOT}/av1/encoder/cnn.c"
-                   "${AOM_ROOT}/av1/encoder/cnn.h"
-                   "${AOM_ROOT}/av1/encoder/firstpass.c"
-                   "${AOM_ROOT}/av1/encoder/firstpass.h"
-                   "${AOM_ROOT}/av1/encoder/gop_structure.c"
-                   "${AOM_ROOT}/av1/encoder/gop_structure.h"
-                   "${AOM_ROOT}/av1/encoder/misc_model_weights.h"
-                   "${AOM_ROOT}/av1/encoder/partition_cnn_weights.h"
-                   "${AOM_ROOT}/av1/encoder/partition_model_weights.h"
-                   "${AOM_ROOT}/av1/encoder/pass2_strategy.c"
-                   "${AOM_ROOT}/av1/encoder/temporal_filter.c"
-                   "${AOM_ROOT}/av1/encoder/temporal_filter.h"
-                   "${AOM_ROOT}/av1/encoder/tpl_model.c"
-                   "${AOM_ROOT}/av1/encoder/tpl_model.h")
 endif()
 
 # Setup AV1 common/decoder/encoder targets. The libaom target must exist before

@@ -91,18 +91,24 @@ static INLINE PREDICTION_MODE compound_ref0_mode(PREDICTION_MODE mode) {
     SMOOTH_V_PRED,  // SMOOTH_V_PRED
     SMOOTH_H_PRED,  // SMOOTH_H_PRED
     PAETH_PRED,     // PAETH_PRED
-    NEARESTMV,      // NEARESTMV
-    NEARMV,         // NEARMV
-    GLOBALMV,       // GLOBALMV
-    NEWMV,          // NEWMV
-    NEARESTMV,      // NEAREST_NEARESTMV
-    NEARMV,         // NEAR_NEARMV
-    NEARESTMV,      // NEAREST_NEWMV
-    NEWMV,          // NEW_NEARESTMV
-    NEARMV,         // NEAR_NEWMV
-    NEWMV,          // NEW_NEARMV
-    GLOBALMV,       // GLOBAL_GLOBALMV
-    NEWMV,          // NEW_NEWMV
+#if !CONFIG_NEW_INTER_MODES
+    NEARESTMV,  // NEARESTMV
+#endif          // !CONFIG_NEW_INTER_MODES
+    NEARMV,     // NEARMV
+    GLOBALMV,   // GLOBALMV
+    NEWMV,      // NEWMV
+#if !CONFIG_NEW_INTER_MODES
+    NEARESTMV,  // NEAREST_NEARESTMV
+#endif          // !CONFIG_NEW_INTER_MODES
+    NEARMV,     // NEAR_NEARMV
+#if !CONFIG_NEW_INTER_MODES
+    NEARESTMV,  // NEAREST_NEWMV
+    NEWMV,      // NEW_NEARESTMV
+#endif          // !CONFIG_NEW_INTER_MODES
+    NEARMV,     // NEAR_NEWMV
+    NEWMV,      // NEW_NEARMV
+    GLOBALMV,   // GLOBAL_GLOBALMV
+    NEWMV,      // NEW_NEWMV
   };
   assert(NELEMENTS(lut) == MB_MODE_COUNT);
   assert(is_inter_compound_mode(mode) || is_inter_singleref_mode(mode));
@@ -124,18 +130,24 @@ static INLINE PREDICTION_MODE compound_ref1_mode(PREDICTION_MODE mode) {
     MB_MODE_COUNT,  // SMOOTH_V_PRED
     MB_MODE_COUNT,  // SMOOTH_H_PRED
     MB_MODE_COUNT,  // PAETH_PRED
+#if !CONFIG_NEW_INTER_MODES
     MB_MODE_COUNT,  // NEARESTMV
+#endif              // !CONFIG_NEW_INTER_MODES
     MB_MODE_COUNT,  // NEARMV
     MB_MODE_COUNT,  // GLOBALMV
     MB_MODE_COUNT,  // NEWMV
-    NEARESTMV,      // NEAREST_NEARESTMV
-    NEARMV,         // NEAR_NEARMV
-    NEWMV,          // NEAREST_NEWMV
-    NEARESTMV,      // NEW_NEARESTMV
-    NEWMV,          // NEAR_NEWMV
-    NEARMV,         // NEW_NEARMV
-    GLOBALMV,       // GLOBAL_GLOBALMV
-    NEWMV,          // NEW_NEWMV
+#if !CONFIG_NEW_INTER_MODES
+    NEARESTMV,  // NEAREST_NEARESTMV
+#endif          // !CONFIG_NEW_INTER_MODES
+    NEARMV,     // NEAR_NEARMV
+#if !CONFIG_NEW_INTER_MODES
+    NEWMV,      // NEAREST_NEWMV
+    NEARESTMV,  // NEW_NEARESTMV
+#endif          // !CONFIG_NEW_INTER_MODES
+    NEWMV,      // NEAR_NEWMV
+    NEARMV,     // NEW_NEARMV
+    GLOBALMV,   // GLOBAL_GLOBALMV
+    NEWMV,      // NEW_NEWMV
   };
   assert(NELEMENTS(lut) == MB_MODE_COUNT);
   assert(is_inter_compound_mode(mode));
@@ -147,10 +159,23 @@ static INLINE int have_nearmv_in_inter_mode(PREDICTION_MODE mode) {
           mode == NEW_NEARMV);
 }
 
+#if CONFIG_NEW_INTER_MODES
+static INLINE int have_newmv_in_inter_mode(PREDICTION_MODE mode) {
+  return (mode == NEWMV || mode == NEW_NEWMV || mode == NEAR_NEWMV ||
+          mode == NEW_NEARMV);
+}
+static INLINE int have_drl_index(PREDICTION_MODE mode) {
+  return have_nearmv_in_inter_mode(mode) || have_newmv_in_inter_mode(mode);
+}
+#else
 static INLINE int have_newmv_in_inter_mode(PREDICTION_MODE mode) {
   return (mode == NEWMV || mode == NEW_NEWMV || mode == NEAREST_NEWMV ||
           mode == NEW_NEARESTMV || mode == NEAR_NEWMV || mode == NEW_NEARMV);
 }
+static INLINE int have_drl_index(PREDICTION_MODE mode) {
+  return have_nearmv_in_inter_mode(mode) || mode == NEWMV || mode == NEW_NEWMV;
+}
+#endif  // CONFIG_NEW_INTER_MODES
 
 static INLINE int is_masked_compound_type(COMPOUND_TYPE type) {
   return (type == COMPOUND_WEDGE || type == COMPOUND_DIFFWTD);
@@ -223,81 +248,169 @@ typedef struct CHROMA_REF_INFO {
 
 #define INTER_TX_SIZE_BUF_LEN 16
 #define TXK_TYPE_BUF_LEN 64
-// This structure now relates to 4x4 block regions.
+/*!\endcond */
+
+/*! \brief Stores the prediction/txfm mode of the current coding block
+ */
 typedef struct MB_MODE_INFO {
-  // interinter members
-  INTERINTER_COMPOUND_DATA interinter_comp;
-  WarpedMotionParams wm_params;
-  int_mv mv[2];
-  // q index for the current coding block.
-  int current_qindex;
-  // Only for INTER blocks
-#if CONFIG_REMOVE_DUAL_FILTER
-  int interp_fltr;
-#else
-  int_interpfilters interp_filters;
-#endif  // CONFIG_REMOVE_DUAL_FILTER
-  // TODO(debargha): Consolidate these flags
-#if CONFIG_RD_DEBUG
-  RD_STATS rd_stats;
-  int mi_row;
-  int mi_col;
-#endif
-#if CONFIG_INSPECTION
-  int16_t tx_skip[TXK_TYPE_BUF_LEN];
-#endif
-  PALETTE_MODE_INFO palette_mode_info;
+  /*****************************************************************************
+   * \name General Info of the Coding Block
+   ****************************************************************************/
+  /**@{*/
+  /*! \brief The block size of the current coding block */
   // Common for both INTER and INTRA blocks
 #if CONFIG_SDP
   BLOCK_SIZE sb_type[2];
 #else
   BLOCK_SIZE sb_type;
 #endif
-  PREDICTION_MODE mode;
-  // Only for INTRA blocks
-  UV_PREDICTION_MODE uv_mode;
-  // interintra members
-  INTERINTRA_MODE interintra_mode;
-  MOTION_MODE motion_mode;
+  /*! \brief The partition type of the current coding block. */
   PARTITION_TYPE partition;
+  /*! \brief The prediction mode used */
+  PREDICTION_MODE mode;
+  /*! \brief The UV mode when intra is used */
+  UV_PREDICTION_MODE uv_mode;
+  /*! \brief The q index for the current coding block. */
+  int current_qindex;
+  /**@}*/
+
+  /*****************************************************************************
+   * \name Inter Mode Info
+   ****************************************************************************/
+  /**@{*/
+  /*! \brief The motion vectors used by the current inter mode */
+  int_mv mv[2];
+  /*! \brief The reference frames for the MV */
   MV_REFERENCE_FRAME ref_frame[2];
+#if CONFIG_NEW_TX_PARTITION
+  /*! \brief Transform partition type. */
+  TX_PARTITION_TYPE partition_type[INTER_TX_SIZE_BUF_LEN];
+#endif  // CONFIG_NEW_TX_PARTITION
+  /*! \brief Filter used in subpel interpolation. */
+#if CONFIG_REMOVE_DUAL_FILTER
+  int interp_fltr;
+#else
+  int_interpfilters interp_filters;
+#endif  // CONFIG_REMOVE_DUAL_FILTER
+  /*! \brief The motion mode used by the inter prediction. */
+  MOTION_MODE motion_mode;
+  /*! \brief Number of samples used by warp causal */
+  uint8_t num_proj_ref;
+  /*! \brief The number of overlapped neighbors above/left for obmc/warp motion
+   * mode. */
+  uint8_t overlappable_neighbors[2];
+  /*! \brief The parameters used in warp motion mode. */
+  WarpedMotionParams wm_params;
+  /*! \brief The type of intra mode used by inter-intra */
+  INTERINTRA_MODE interintra_mode;
+  /*! \brief The type of wedge used in interintra mode. */
+  int8_t interintra_wedge_index;
+  /*! \brief Struct that stores the data used in interinter compound mode. */
+  INTERINTER_COMPOUND_DATA interinter_comp;
+  /**@}*/
+
+  /*****************************************************************************
+   * \name Intra Mode Info
+   ****************************************************************************/
+  /**@{*/
+  /*! \brief Directional mode delta: the angle is base angle + (angle_delta *
+   * step). */
+  int8_t angle_delta[PLANE_TYPES];
+  /*! \brief The type of filter intra mode used (if applicable). */
   FILTER_INTRA_MODE_INFO filter_intra_mode_info;
+  /*! \brief Chroma from Luma: Joint sign of alpha Cb and alpha Cr */
+  int8_t cfl_alpha_signs;
+  /*! \brief Chroma from Luma: Index of the alpha Cb and alpha Cr combination */
+  uint8_t cfl_alpha_idx;
+  /*! \brief Stores the size and colors of palette mode */
+  PALETTE_MODE_INFO palette_mode_info;
+#if CONFIG_MRLS
+  /*! \brief Reference line index for multiple reference line selection. */
+  uint8_t mrl_index;
+#endif
+  /**@}*/
+
+  /*****************************************************************************
+   * \name Transform Info
+   ****************************************************************************/
+  /**@{*/
+  /*! \brief Whether to skip transforming and sending. */
 #if CONFIG_SDP
   int8_t skip_txfm[2];
 #else
   int8_t skip_txfm;
 #endif
-  uint8_t inter_tx_size[INTER_TX_SIZE_BUF_LEN];
+  /*! \brief Transform size when fixed size txfm is used (e.g. intra modes). */
   TX_SIZE tx_size;
+  /*! \brief Transform size when recursive txfm tree is on. */
+  uint8_t inter_tx_size[INTER_TX_SIZE_BUF_LEN];
+  /**@}*/
+
+  /*****************************************************************************
+   * \name Loop Filter Info
+   ****************************************************************************/
+  /**@{*/
+  /*! \copydoc MACROBLOCKD::delta_lf_from_base */
   int8_t delta_lf_from_base;
+  /*! \copydoc MACROBLOCKD::delta_lf */
   int8_t delta_lf[FRAME_LF_COUNT];
-  int8_t interintra_wedge_index;
-  // The actual prediction angle is the base angle + (angle_delta * step).
-  int8_t angle_delta[PLANE_TYPES];
-  /* deringing gain *per-superblock* */
-  // Joint sign of alpha Cb and alpha Cr
-  int8_t cfl_alpha_signs;
-  // Index of the alpha Cb and alpha Cr combination
-  uint8_t cfl_alpha_idx;
-  uint8_t num_proj_ref;
-  uint8_t overlappable_neighbors[2];
-  // If comp_group_idx=0, indicate if dist_wtd_comp(0) or avg_comp(1) is used.
-  uint8_t compound_idx;
-  uint8_t use_wedge_interintra : 1;
+  /**@}*/
+
+  /*****************************************************************************
+   * \name Bitfield for Memory Reduction
+   ****************************************************************************/
+  /**@{*/
+  /*! \brief The segment id */
   uint8_t segment_id : 3;
-  uint8_t seg_id_predicted : 1;  // valid only when temporal_update is enabled
+  /*! \brief Only valid when temporal update if off. */
+  uint8_t seg_id_predicted : 1;
+  /*! \brief Which ref_mv to use */
+#if CONFIG_NEW_INTER_MODES
+  uint8_t ref_mv_idx : 3;
+#else
+  uint8_t ref_mv_idx : 2;
+#endif  // CONFIG_NEW_INTER_MODES
+  /*! \brief Inter skip mode */
   uint8_t skip_mode : 1;
+  /*! \brief Whether intrabc is used. */
 #if CONFIG_SDP
   uint8_t use_intrabc[2];
 #else
   uint8_t use_intrabc : 1;
 #endif
-  uint8_t ref_mv_idx : 2;
-  // Indicate if masked compound is used(1) or not(0).
+  /*! \brief Indicates if masked compound is used(1) or not (0). */
   uint8_t comp_group_idx : 1;
+  /*! \brief Indicates whether dist_wtd_comp(0) is used or not (0). */
+  uint8_t compound_idx : 1;
+  /*! \brief Whether to use interintra wedge */
+  uint8_t use_wedge_interintra : 1;
+  /*! \brief CDEF strength per BLOCK_64X64 */
   int8_t cdef_strength : 4;
+  /*! \brief chroma block info for sub-8x8 cases */
   CHROMA_REF_INFO chroma_ref_info;
+#if CONFIG_CCSO
+  /*! \brief Whether to use cross-component sample offset for the U plane. */
+  uint8_t ccso_blk_u : 2;
+  /*! \brief Whether to use cross-component sample offset for the V plane. */
+  uint8_t ccso_blk_v : 2;
+#endif
+  /**@}*/
+
+#if CONFIG_RD_DEBUG
+  /*! \brief RD info used for debugging */
+  RD_STATS rd_stats;
+  /*! \brief The current row in unit of 4x4 blocks for debugging */
+  int mi_row;
+  /*! \brief The current col in unit of 4x4 blocks for debugging */
+  int mi_col;
+#endif
+#if CONFIG_INSPECTION
+  /*! \brief Whether we are skipping the current rows or columns. */
+  int16_t tx_skip[TXK_TYPE_BUF_LEN];
+#endif
 } MB_MODE_INFO;
+
+/*!\cond */
 
 typedef struct PARTITION_TREE {
   struct PARTITION_TREE *parent;
@@ -339,7 +452,7 @@ static INLINE int is_intrabc_block(const MB_MODE_INFO *mbmi, int tree_type) {
 static INLINE int is_intrabc_block(const MB_MODE_INFO *mbmi) {
   return mbmi->use_intrabc;
 }
-#endif  // CONFIG_SDP
+#endif
 
 static INLINE PREDICTION_MODE get_uv_mode(UV_PREDICTION_MODE mode) {
   assert(mode < UV_INTRA_MODES);
@@ -852,7 +965,11 @@ typedef struct macroblockd_plane {
   // The dequantizers below are true dequantizers used only in the
   // dequantization process.  They have the same coefficient
   // shift/scale as TX.
+#if CONFIG_EXTQUANT
+  int32_t seg_dequant_QTX[MAX_SEGMENTS][2];
+#else
   int16_t seg_dequant_QTX[MAX_SEGMENTS][2];
+#endif
   // Pointer to color index map of:
   // - Current coding block, on encoder side.
   // - Current superblock, on decoder side.
@@ -1355,6 +1472,18 @@ typedef struct macroblockd {
    * 'cpi->tile_thr_data[t].td->mb.tmp_pred_bufs'.
    */
   uint8_t *tmp_obmc_bufs[2];
+#if CONFIG_IST
+  /*!
+   * Enable IST for current coding block.
+   */
+  uint8_t enable_ist;
+#endif
+#if CONFIG_CCSO
+  /** ccso blk u */
+  uint8_t ccso_blk_u;
+  /** ccso blk v */
+  uint8_t ccso_blk_v;
+#endif
 } MACROBLOCKD;
 
 /*!\cond */
@@ -1654,6 +1783,20 @@ static INLINE int av1_get_txb_size_index(BLOCK_SIZE bsize, int blk_row,
  */
 static INLINE int av1_get_txk_type_index(BLOCK_SIZE bsize, int blk_row,
                                          int blk_col) {
+  int index = 0;
+#if CONFIG_NEW_TX_PARTITION
+  assert(bsize < BLOCK_SIZES_ALL);
+  TX_SIZE txs = max_txsize_rect_lookup[bsize];
+  // Get smallest possible sub_tx size
+  txs = smallest_sub_tx_size_map[txs];
+  const int tx_w_log2 = tx_size_wide_log2[txs] - MI_SIZE_LOG2;
+  const int tx_h_log2 = tx_size_high_log2[txs] - MI_SIZE_LOG2;
+  const int bw_uint_log2 = mi_size_wide_log2[bsize];
+  const int stride_log2 = bw_uint_log2 - tx_w_log2;
+  index = ((blk_row >> tx_h_log2) << stride_log2) + (blk_col >> tx_w_log2);
+  assert(index < TXK_TYPE_BUF_LEN);
+  return index;
+#endif  // CONFIG_NEW_TX_PARTITION
   static const uint8_t tw_w_log2_table[BLOCK_SIZES_ALL] = {
     0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 2, 2, 2, 2, 2, 2, 0, 0, 1, 1, 2, 2,
   };
@@ -1663,9 +1806,8 @@ static INLINE int av1_get_txk_type_index(BLOCK_SIZE bsize, int blk_row,
   static const uint8_t stride_log2_table[BLOCK_SIZES_ALL] = {
     0, 0, 1, 1, 1, 2, 2, 1, 2, 2, 1, 2, 2, 2, 3, 3, 0, 2, 0, 2, 0, 2,
   };
-  const int index =
-      ((blk_row >> tw_h_log2_table[bsize]) << stride_log2_table[bsize]) +
-      (blk_col >> tw_w_log2_table[bsize]);
+  index = ((blk_row >> tw_h_log2_table[bsize]) << stride_log2_table[bsize]) +
+          (blk_col >> tw_w_log2_table[bsize]);
   assert(index < TXK_TYPE_BUF_LEN);
   return index;
 }
@@ -1694,15 +1836,107 @@ static INLINE void update_txk_array(MACROBLOCKD *const xd, int blk_row,
   }
 }
 
+#if CONFIG_IST
+static INLINE int tx_size_is_depth0(TX_SIZE tx_size, BLOCK_SIZE bsize) {
+  TX_SIZE ctx_size = max_txsize_rect_lookup[bsize];
+  return ctx_size == tx_size;
+}
+
+static INLINE int tx_size_to_depth(TX_SIZE tx_size, BLOCK_SIZE bsize) {
+  TX_SIZE ctx_size = max_txsize_rect_lookup[bsize];
+  int depth = 0;
+  while (tx_size != ctx_size) {
+    depth++;
+    ctx_size = sub_tx_size_map[ctx_size];
+  }
+  return depth;
+}
+/*
+ * If secondary transform is enabled (CONFIG_IST) :
+ * Bits 4~5 of tx_type stores secondary tx_type
+ * Bits 0~3 of tx_type stores primary tx_type
+ *
+ * This function masks secondary transform type used by the transform block
+ *
+ */
+static INLINE void disable_secondary_tx_type(TX_TYPE *tx_type) {
+  *tx_type &= 0x0f;
+}
+/*
+ * This function masks primary transform type used by the transform block
+ */
+static INLINE void disable_primary_tx_type(TX_TYPE *tx_type) {
+  *tx_type &= 0xf0;
+}
+/*
+ * This function returns primary transform type used by the transform block
+ */
+static INLINE TX_TYPE get_primary_tx_type(TX_TYPE tx_type) {
+  return tx_type & 0x0f;
+}
+/*
+ * This function returns secondary transform type used by the transform block
+ */
+static INLINE TX_TYPE get_secondary_tx_type(TX_TYPE tx_type) {
+  return (tx_type >> 4);
+}
+/*
+ * This function checks and returns 1 if secondary transform type needs to be
+ * signaled for the transform block
+ */
+static INLINE int block_signals_sec_tx_type(const MACROBLOCKD *xd,
+                                            TX_SIZE tx_size, TX_TYPE tx_type,
+                                            int eob) {
+  const MB_MODE_INFO *mbmi = xd->mi[0];
+  PREDICTION_MODE intra_dir;
+  if (mbmi->filter_intra_mode_info.use_filter_intra) {
+    intra_dir =
+        fimode_to_intradir[mbmi->filter_intra_mode_info.filter_intra_mode];
+  } else {
+    intra_dir = mbmi->mode;
+  }
+#if CONFIG_SDP
+  const BLOCK_SIZE bs = mbmi->sb_type[PLANE_TYPE_Y];
+#else
+  const BLOCK_SIZE bs = mbmi->sb_type;
+#endif
+  const TX_TYPE primary_tx_type = get_primary_tx_type(tx_type);
+  const int width = tx_size_wide[tx_size];
+  const int height = tx_size_high[tx_size];
+  const int sb_size = (width >= 8 && height >= 8) ? 8 : 4;
+  bool ist_eob = 1;
+  if (((sb_size == 4) && (eob > IST_4x4_HEIGHT - 1)) ||
+      ((sb_size == 8) && (eob > IST_8x8_HEIGHT - 1))) {
+    ist_eob = 0;
+  }
+  const int depth = tx_size_to_depth(tx_size, bs);
+  const int code_stx =
+      (primary_tx_type == DCT_DCT || primary_tx_type == ADST_ADST) &&
+      (intra_dir < PAETH_PRED) &&
+      !(mbmi->filter_intra_mode_info.use_filter_intra) && !(depth) && ist_eob;
+  return code_stx;
+}
+#endif
+
+/*
+ * This function returns the tx_type used by the transform block
+ *
+ * If secondary transform is enabled (CONFIG_IST) :
+ * Bits 4~5 of tx_type stores secondary tx_type
+ * Bits 0~3 of tx_type stores primary tx_type
+ */
 static INLINE TX_TYPE av1_get_tx_type(const MACROBLOCKD *xd,
                                       PLANE_TYPE plane_type, int blk_row,
                                       int blk_col, TX_SIZE tx_size,
                                       int reduced_tx_set) {
   const MB_MODE_INFO *const mbmi = xd->mi[0];
+#if CONFIG_IST
+  if (xd->lossless[mbmi->segment_id]) {
+#else
   if (xd->lossless[mbmi->segment_id] || txsize_sqr_up_map[tx_size] > TX_32X32) {
+#endif  // CONFIG_IST
     return DCT_DCT;
   }
-
   TX_TYPE tx_type;
   if (plane_type == PLANE_TYPE_Y) {
     tx_type = xd->tx_type_map[blk_row * xd->tx_type_map_stride + blk_col];
@@ -1717,6 +1951,10 @@ static INLINE TX_TYPE av1_get_tx_type(const MACROBLOCKD *xd,
       blk_row <<= pd->subsampling_y;
       blk_col <<= pd->subsampling_x;
       tx_type = xd->tx_type_map[blk_row * xd->tx_type_map_stride + blk_col];
+#if CONFIG_IST
+      // Secondary transforms are disabled for chroma
+      disable_secondary_tx_type(&tx_type);
+#endif  // CONFIG_IST
     } else {
       // In intra mode, uv planes don't share the same prediction mode as y
       // plane, so the tx_type should not be shared
@@ -1731,6 +1969,22 @@ static INLINE TX_TYPE av1_get_tx_type(const MACROBLOCKD *xd,
 #endif
     if (!av1_ext_tx_used[tx_set_type][tx_type]) tx_type = DCT_DCT;
   }
+#if CONFIG_IST
+#if CONFIG_SDP
+  assert(av1_ext_tx_used[av1_get_ext_tx_set_type(
+      tx_size, is_inter_block(mbmi, xd->tree_type), reduced_tx_set)]
+                        [get_primary_tx_type(tx_type)]);
+#else
+  assert(av1_ext_tx_used[av1_get_ext_tx_set_type(tx_size, is_inter_block(mbmi),
+                                                 reduced_tx_set)]
+                        [get_primary_tx_type(tx_type)]);
+#endif  // CONFIG_SDP
+  if (txsize_sqr_up_map[tx_size] > TX_32X32) {
+    // secondary transforms are enabled for txsize_sqr_up_map[tx_size] >
+    // TX_32X32 while tx_type is by default DCT_DCT.
+    disable_primary_tx_type(&tx_type);
+  }
+#else
   assert(tx_type < TX_TYPES);
 #if CONFIG_SDP
   assert(av1_ext_tx_used[av1_get_ext_tx_set_type(
@@ -1738,7 +1992,8 @@ static INLINE TX_TYPE av1_get_tx_type(const MACROBLOCKD *xd,
 #else
   assert(av1_ext_tx_used[av1_get_ext_tx_set_type(tx_size, is_inter_block(mbmi),
                                                  reduced_tx_set)][tx_type]);
-#endif
+#endif  // CONFIG_SDP
+#endif  // CONFIG_IST
   return tx_type;
 }
 
@@ -2092,7 +2347,6 @@ static INLINE int av1_get_max_eob(TX_SIZE tx_size) {
   }
   return tx_size_2d[tx_size];
 }
-
 /*!\endcond */
 
 #ifdef __cplusplus

@@ -324,6 +324,8 @@ class ErrorResilienceTestLarge
   unsigned int s_frames_[kMaxSFrames];
   libaom_test::TestMode encoding_mode_;
   int allow_mismatch_;
+
+ public:
   int enable_altref_;
 };
 
@@ -361,6 +363,12 @@ TEST_P(ErrorResilienceTestLarge, OnVersusOff) {
 // if we lose (i.e., drop before decoding) a set of droppable
 // frames (i.e., frames that don't update any reference buffers).
 TEST_P(ErrorResilienceTestLarge, DropFramesWithoutRecovery) {
+  /* TODO(anyone): Currently DropFramesWithoutRecovery is not intended to work
+   * with enable_altref_ == 1, because altref frames are not droppable.
+   * Consider expanding this test to check that the droppable frame does not
+   * fall on an invisible frame.
+   */
+  if (enable_altref_) return;
   SetupEncoder(500, 10);
   libaom_test::I420VideoSource video("hantro_collage_w352h288.yuv", 352, 288,
                                      cfg_.g_timebase.den, cfg_.g_timebase.num,
@@ -440,14 +448,14 @@ TEST_P(ErrorResilienceTestLarge, SFrameTest) {
   // show_existing_frame. This issue still needs to be addressed.
   // Set an arbitrary S-frame
   unsigned int num_s_frames = 1;
-  unsigned int s_frame_list[] = { 6 };
+  unsigned int s_frame_list[] = { 8 };
   SetSFrames(num_s_frames, s_frame_list);
   // Ensure that any invisible frames before the S frame are dropped
   SetInvisibleErrorFrames(num_s_frames, s_frame_list);
 
   // Set a few frames before the S frame that are lost (not decoded)
-  unsigned int num_error_frames = 4;
-  unsigned int error_frame_list[] = { 2, 3, 4, 5 };
+  unsigned int num_error_frames = 6;
+  unsigned int error_frame_list[] = { 2, 3, 4, 5, 6, 7 };
   SetErrorFrames(num_error_frames, error_frame_list);
 
   ASSERT_NO_FATAL_FAILURE(RunLoop(&video));
@@ -460,7 +468,7 @@ TEST_P(ErrorResilienceTestLarge, SFrameTest) {
   EXPECT_LE(GetMismatchFrames(), GetEncodedFrames() - s_frame_list[0]);
 }
 
-AV1_INSTANTIATE_TEST_SUITE(ErrorResilienceTestLarge, NONREALTIME_TEST_MODES,
+AV1_INSTANTIATE_TEST_SUITE(ErrorResilienceTestLarge, GOODQUALITY_TEST_MODES,
                            ::testing::Values(0, 1));
 
 // This class is used to check the presence of SFrame.
@@ -541,7 +549,7 @@ TEST_P(SFramePresenceTestLarge, SFramePresenceTest) {
  * Hence this configuration is not added. Add this configuration after the
  * bug is fixed.
  */
-AV1_INSTANTIATE_TEST_SUITE(SFramePresenceTestLarge, NONREALTIME_TEST_MODES,
+AV1_INSTANTIATE_TEST_SUITE(SFramePresenceTestLarge, GOODQUALITY_TEST_MODES,
                            ::testing::Values(AOM_Q, AOM_VBR, AOM_CBR, AOM_CQ),
                            ::testing::Values(0));
 }  // namespace

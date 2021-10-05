@@ -70,6 +70,9 @@ static AOM_INLINE void tpl_fwd_txfm(const int16_t *src_diff, int bw,
                                     int bit_depth, int is_hbd) {
   TxfmParam txfm_param;
   txfm_param.tx_type = DCT_DCT;
+#if CONFIG_IST
+  txfm_param.sec_tx_type = 0;
+#endif
   txfm_param.tx_size = tx_size;
   txfm_param.lossless = 0;
   txfm_param.tx_set_type = EXT_TX_SET_ALL16;
@@ -309,11 +312,15 @@ static AOM_INLINE void mode_estimation(AV1_COMP *cpi, MACROBLOCK *x, int mi_row,
     av1_predict_intra_block(cm, xd, block_size_wide[bsize],
                             block_size_high[bsize], tx_size, mode, 0, 0,
                             FILTER_INTRA_MODES, dst_buffer, dst_buffer_stride,
-                            predictor, bw, 0, 0, 0);
+                            predictor, bw, 0, 0,
+#if CONFIG_ORIP
+                            0, 0);
+#else
+                            0);
+#endif
 
     intra_cost = tpl_get_satd_cost(x, src_diff, bw, src_mb_buffer, src_stride,
                                    predictor, bw, coeff, bw, bh, tx_size);
-
     if (intra_cost < best_intra_cost) {
       best_intra_cost = intra_cost;
       best_mode = mode;
@@ -490,7 +497,14 @@ static AOM_INLINE void mode_estimation(AV1_COMP *cpi, MACROBLOCK *x, int mi_row,
     av1_predict_intra_block(cm, xd, block_size_wide[bsize],
                             block_size_high[bsize], tx_size, best_mode, 0, 0,
                             FILTER_INTRA_MODES, dst_buffer, dst_buffer_stride,
-                            dst_buffer, dst_buffer_stride, 0, 0, 0);
+                            dst_buffer, dst_buffer_stride, 0, 0
+#if CONFIG_ORIP
+                            ,
+                            0, 0);
+#else
+                            ,
+                            0);
+#endif
   }
 
   int rate_cost;
@@ -797,8 +811,8 @@ static AOM_INLINE void init_mc_flow_dispenser(AV1_COMP *cpi, int frame_idx,
   }
 
   // Work out which reference frame slots may be used.
-  ref_frame_flags = get_ref_frame_flags(&cpi->sf, ref_frames_ordered,
-                                        cpi->ext_flags.ref_frame_flags);
+  ref_frame_flags =
+      get_ref_frame_flags(ref_frames_ordered, cpi->ext_flags.ref_frame_flags);
 
   enforce_max_ref_frames(cpi, &ref_frame_flags);
 

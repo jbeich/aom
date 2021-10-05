@@ -62,6 +62,9 @@
 #include "av1/encoder/mv_prec.h"
 #include "av1/encoder/pass2_strategy.h"
 #include "av1/encoder/pickcdef.h"
+#if CONFIG_CCSO
+#include "av1/encoder/pickccso.h"
+#endif
 #include "av1/encoder/picklpf.h"
 #include "av1/encoder/pickrst.h"
 #include "av1/encoder/random.h"
@@ -75,9 +78,12 @@
 #include "av1/encoder/subgop.h"
 #include "av1/encoder/superres_scale.h"
 #include "av1/encoder/tpl_model.h"
-#include "av1/encoder/var_based_part.h"
 
 #define DEFAULT_EXPLICIT_ORDER_HINT_BITS 7
+
+#if CONFIG_NEW_INTER_MODES
+#define DEF_MAX_DRL_REFMVS 4
+#endif  // CONFIG_NEW_INTER_MODES
 
 #if CONFIG_ENTROPY_STATS
 FRAME_COUNTS aggregate_fc;
@@ -393,7 +399,7 @@ void av1_init_seq_coding_tools(SequenceHeader *seq, AV1_COMMON *cm,
       (tool_cfg->force_video_mode == 0) && (oxcf->input_cfg.limit == 1);
   seq->reduced_still_picture_hdr = seq->still_picture;
   seq->reduced_still_picture_hdr &= !tool_cfg->full_still_picture_hdr;
-  seq->force_screen_content_tools = (oxcf->mode == REALTIME) ? 0 : 2;
+  seq->force_screen_content_tools = 2;
   seq->force_integer_mv = 2;
   seq->order_hint_info.enable_order_hint = tool_cfg->enable_order_hint;
   seq->frame_id_numbers_present_flag =
@@ -441,6 +447,9 @@ void av1_init_seq_coding_tools(SequenceHeader *seq, AV1_COMMON *cm,
   seq->enable_superres = oxcf->superres_cfg.enable_superres;
   seq->enable_cdef = tool_cfg->enable_cdef;
   seq->enable_restoration = tool_cfg->enable_restoration;
+#if CONFIG_CCSO
+  seq->enable_ccso = tool_cfg->enable_ccso;
+#endif
   seq->enable_warped_motion = oxcf->motion_mode_cfg.enable_warped_motion;
   seq->enable_interintra_compound = tool_cfg->enable_interintra_comp;
   seq->enable_masked_compound = oxcf->comp_type_cfg.enable_masked_comp;
@@ -449,7 +458,15 @@ void av1_init_seq_coding_tools(SequenceHeader *seq, AV1_COMMON *cm,
 #if CONFIG_SDP
   seq->enable_sdp = oxcf->part_cfg.enable_sdp;
 #endif
-
+#if CONFIG_MRLS
+  seq->enable_mrls = oxcf->intra_mode_cfg.enable_mrls;
+#endif
+#if CONFIG_ORIP
+  seq->enable_orip = oxcf->intra_mode_cfg.enable_orip;
+#endif
+#if CONFIG_IST
+  seq->enable_ist = oxcf->txfm_cfg.enable_ist;
+#endif
   set_bitstream_level_tier(seq, cm, frm_dim_cfg->width, frm_dim_cfg->height,
                            oxcf->input_cfg.init_framerate);
 
@@ -472,6 +489,22 @@ void av1_init_seq_coding_tools(SequenceHeader *seq, AV1_COMMON *cm,
       }
     }
   }
+#if CONFIG_EXTQUANT
+  const int is_360p_or_larger =
+      AOMMIN(seq->max_frame_width, seq->max_frame_height) >= 360;
+  const int is_720p_or_larger =
+      AOMMIN(seq->max_frame_width, seq->max_frame_height) >= 720;
+  if (!is_360p_or_larger) {
+    seq->base_y_dc_delta_q = -7;
+    seq->base_uv_dc_delta_q = -6;
+  } else if (!is_720p_or_larger) {
+    seq->base_y_dc_delta_q = -5;
+    seq->base_uv_dc_delta_q = -4;
+  } else {
+    seq->base_y_dc_delta_q = -4;
+    seq->base_uv_dc_delta_q = -3;
+  }
+#endif  // CONFIG_EXTQUANT
 }
 
 static void init_config(struct AV1_COMP *cpi, AV1EncoderConfig *oxcf) {
@@ -590,6 +623,22 @@ int aom_strcmp(const char *a, const char *b) {
   if (a != NULL && b == NULL) return 1;
   return strcmp(a, b);
 }
+
+#if CONFIG_NEW_INTER_MODES
+static void set_max_drl_bits(struct AV1_COMP *cpi) {
+  AV1_COMMON *const cm = &cpi->common;
+  // Add logic to choose this in the range [MIN_MAX_DRL_BITS, MAX_MAX_DRL_BITS]
+  if (cpi->oxcf.tool_cfg.max_drl_refmvs == 0) {
+    // TODO(any): Implement an auto mode that potentially adapts the parameter
+    // frame to frame. Currently set at a default value.
+    cm->features.max_drl_bits = DEF_MAX_DRL_REFMVS - 1;
+  } else {
+    cm->features.max_drl_bits = cpi->oxcf.tool_cfg.max_drl_refmvs - 1;
+  }
+  assert(cm->features.max_drl_bits >= MIN_MAX_DRL_BITS &&
+         cm->features.max_drl_bits <= MAX_MAX_DRL_BITS);
+}
+#endif  // CONFIG_NEW_INTER_MODES
 
 void av1_change_config(struct AV1_COMP *cpi, const AV1EncoderConfig *oxcf) {
   AV1_COMMON *const cm = &cpi->common;
@@ -726,6 +775,11 @@ void av1_change_config(struct AV1_COMP *cpi, const AV1EncoderConfig *oxcf) {
 
   av1_reset_segment_features(cm);
 
+#if CONFIG_NEW_INTER_MODES
+  // Add logic to choose this in the range [MIN_MAX_DRL_BITS, MAX_MAX_DRL_BITS]
+  set_max_drl_bits(cpi);
+#endif  // CONFIG_NEW_INTER_MODES
+
   av1_set_high_precision_mv(cpi, 1, 0);
 
   set_rc_buffer_sizes(rc, rc_cfg);
@@ -840,11 +894,13 @@ void av1_change_config(struct AV1_COMP *cpi, const AV1EncoderConfig *oxcf) {
     // or append to it.
     av1_process_subgop_config_set(cpi->subgop_config_str,
                                   &cpi->subgop_config_set);
-    printf("Successfully processed %d subgop configs.\n",
-           cpi->subgop_config_set.num_configs);
-    // Print out the configuration. Note the printed configuration
-    // is in fact in the config file format that can be parsed back.
-    av1_print_subgop_config_set(&cpi->subgop_config_set);
+    if (cpi->print_per_frame_stats) {
+      printf("Successfully processed %d subgop configs.\n",
+             cpi->subgop_config_set.num_configs);
+      // Print out the configuration. Note the printed configuration
+      // is in fact in the config file format that can be parsed back.
+      av1_print_subgop_config_set(&cpi->subgop_config_set);
+    }
   }
 }
 
@@ -884,6 +940,10 @@ AV1_COMP *av1_create_compressor(AV1EncoderConfig *oxcf, BufferPool *const pool,
     av1_remove_compressor(cpi);
     return 0;
   }
+
+#if DEBUG_EXTQUANT
+  cm->fEncCoeffLog = fopen("EncCoeffLog.txt", "wt");
+#endif
 
   cm->error.setjmp = 1;
   cpi->lap_enabled = num_lap_buffers > 0;
@@ -1002,11 +1062,9 @@ AV1_COMP *av1_create_compressor(AV1EncoderConfig *oxcf, BufferPool *const pool,
   cpi->twopass.stats_buf_ctx = stats_buf_context;
   cpi->twopass.stats_in = cpi->twopass.stats_buf_ctx->stats_in_start;
 
-#if !CONFIG_REALTIME_ONLY
   if (is_stat_consumption_stage(cpi)) {
     av1_init_single_pass_lap(cpi);
   }
-#endif  // !CONFIG_REALTIME_ONLY
 
   int sb_mi_size = av1_get_sb_mi_size(cm);
 
@@ -1326,8 +1384,8 @@ AV1_COMP *av1_create_compressor(AV1EncoderConfig *oxcf, BufferPool *const pool,
    * called later when needed. This will avoid unnecessary calls of
    * av1_init_quantizer() for every frame.
    */
-  av1_init_quantizer(&cpi->enc_quant_dequant_params, &cm->quant_params,
-                     cm->seq_params.bit_depth);
+  av1_init_quantizer(&cm->seq_params, &cpi->enc_quant_dequant_params,
+                     &cm->quant_params);
   av1_qm_init(&cm->quant_params, av1_num_planes(cm));
 
   av1_loop_filter_init(cm);
@@ -1527,9 +1585,7 @@ void av1_remove_compressor(AV1_COMP *cpi) {
     aom_free(mt_info->workers);
   }
 
-#if !CONFIG_REALTIME_ONLY
   av1_tpl_dealloc(&tpl_data->tpl_mt_sync);
-#endif
   if (mt_info->num_workers > 1) {
     av1_loop_filter_dealloc(&mt_info->lf_row_sync);
     av1_loop_restoration_dealloc(&mt_info->lr_row_sync, mt_info->num_workers);
@@ -1545,6 +1601,12 @@ void av1_remove_compressor(AV1_COMP *cpi) {
 
   av1_remove_common(cm);
   av1_free_ref_frame_buffers(cm->buffer_pool);
+
+#if DEBUG_EXTQUANT
+  if (cpi->common.fEncCoeffLog != NULL) {
+    fclose(cpi->common.fEncCoeffLog);
+  }
+#endif
 
   aom_free(cpi->subgop_config_str);
   aom_free(cpi->subgop_config_path);
@@ -1748,13 +1810,24 @@ void av1_set_screen_content_options(const AV1_COMP *cpi,
     }
   }
 
+  const int col_factor = 11;
+  const int var_factor = 12;
+
   // The threshold values are selected experimentally.
   features->allow_screen_content_tools =
-      counts_1 * blk_h * blk_w * 10 > width * height;
+      counts_1 * blk_h * blk_w * col_factor > width * height;
   // IntraBC would force loop filters off, so we use more strict rules that also
   // requires that the block has high variance.
-  features->allow_intrabc = features->allow_screen_content_tools &&
-                            counts_2 * blk_h * blk_w * 12 > width * height;
+  features->allow_intrabc =
+      features->allow_screen_content_tools &&
+      counts_2 * blk_h * blk_w * var_factor > width * height;
+  /*
+  printf("allow_screen_content_tools = %d, allow_intrabc = %d\n",
+         features->allow_screen_content_tools, features->allow_intrabc);
+  printf("c1 %d > %f; c1 %d > %f\n", counts_1,
+         width * height / ((float)(blk_h * blk_w * col_factor)), counts_2,
+         width * height / ((float)(blk_h * blk_w * var_factor)));
+         */
 }
 
 // Function pointer to search site config initialization
@@ -1991,6 +2064,56 @@ void av1_set_frame_size(AV1_COMP *cpi, int width, int height) {
 static void cdef_restoration_frame(AV1_COMP *cpi, AV1_COMMON *cm,
                                    MACROBLOCKD *xd, int use_restoration,
                                    int use_cdef) {
+#if CONFIG_CCSO
+  uint16_t *rec_uv[2];
+  uint16_t *org_uv[2];
+  uint16_t *ext_rec_y;
+  uint8_t *ref_buffer;
+  const YV12_BUFFER_CONFIG *ref = cpi->source;
+  int ref_stride;
+  const int use_ccso = !cm->features.coded_lossless && !cm->tiles.large_scale &&
+                       cm->seq_params.enable_ccso;
+  const int num_planes = av1_num_planes(cm);
+  av1_setup_dst_planes(xd->plane, &cm->cur_frame->buf, 0, 0, 0, num_planes,
+                       NULL);
+  const int ccso_stride = xd->plane[0].dst.width;
+  const int ccso_stride_ext = xd->plane[0].dst.width + (CCSO_PADDING_SIZE << 1);
+  for (int pli = 0; pli < 2; pli++) {
+    rec_uv[pli] =
+        aom_malloc(sizeof(*rec_uv) * xd->plane[0].dst.height * ccso_stride);
+    org_uv[pli] =
+        aom_malloc(sizeof(*org_uv) * xd->plane[0].dst.height * ccso_stride);
+  }
+  if (use_ccso) {
+    ext_rec_y =
+        aom_malloc(sizeof(*ext_rec_y) *
+                   (xd->plane[0].dst.height + (CCSO_PADDING_SIZE << 1)) *
+                   (xd->plane[0].dst.width + (CCSO_PADDING_SIZE << 1)));
+    for (int pli = 0; pli < 1; pli++) {
+      const int pic_height = xd->plane[pli].dst.height;
+      const int pic_width = xd->plane[pli].dst.width;
+      const int dst_stride = xd->plane[pli].dst.stride;
+      for (int r = 0; r < pic_height; ++r) {
+        for (int c = 0; c < pic_width; ++c) {
+          if (cm->seq_params.use_highbitdepth) {
+            if (pli == 0)
+              ext_rec_y[(r + CCSO_PADDING_SIZE) * ccso_stride_ext + c +
+                        CCSO_PADDING_SIZE] =
+                  CONVERT_TO_SHORTPTR(
+                      xd->plane[pli].dst.buf)[r * dst_stride + c];
+          } else {
+            if (pli == 0)
+              ext_rec_y[(r + CCSO_PADDING_SIZE) * ccso_stride_ext + c +
+                        CCSO_PADDING_SIZE] =
+                  xd->plane[pli].dst.buf[r * dst_stride + c];
+          }
+        }
+      }
+    }
+    extend_ccso_border(ext_rec_y, CCSO_PADDING_SIZE, xd);
+  }
+#endif
+
   MultiThreadInfo *const mt_info = &cpi->mt_info;
   const int num_workers = mt_info->num_workers;
   if (use_restoration)
@@ -2016,11 +2139,58 @@ static void cdef_restoration_frame(AV1_COMP *cpi, AV1_COMMON *cm,
     cm->cdef_info.cdef_uv_strengths[0] = 0;
   }
 
+#if CONFIG_CCSO
+  if (use_ccso) {
+    av1_setup_dst_planes(xd->plane, &cm->cur_frame->buf, 0, 0, 0, num_planes,
+                         NULL);
+    // Reading original and reconstructed chroma samples as input
+    for (int pli = 1; pli < 3; pli++) {
+      const int pic_height = xd->plane[pli].dst.height;
+      const int pic_width = xd->plane[pli].dst.width;
+      const int dst_stride = xd->plane[pli].dst.stride;
+      switch (pli) {
+        case 1:
+          ref_buffer = ref->u_buffer;
+          ref_stride = ref->uv_stride;
+          break;
+        case 2:
+          ref_buffer = ref->v_buffer;
+          ref_stride = ref->uv_stride;
+          break;
+        default: ref_stride = 0;
+      }
+      for (int r = 0; r < pic_height; ++r) {
+        for (int c = 0; c < pic_width; ++c) {
+          if (cm->seq_params.use_highbitdepth) {
+            rec_uv[pli - 1][r * ccso_stride + c] =
+                CONVERT_TO_SHORTPTR(xd->plane[pli].dst.buf)[r * dst_stride + c];
+            org_uv[pli - 1][r * ccso_stride + c] =
+                CONVERT_TO_SHORTPTR(ref_buffer)[r * ref_stride + c];
+          } else {
+            rec_uv[pli - 1][r * ccso_stride + c] =
+                xd->plane[pli].dst.buf[r * dst_stride + c];
+            org_uv[pli - 1][r * ccso_stride + c] =
+                ref_buffer[r * ref_stride + c];
+          }
+        }
+      }
+    }
+    ccso_search(cm, xd, cpi->td.mb.rdmult, ext_rec_y, rec_uv, org_uv);
+    ccso_frame(&cm->cur_frame->buf, cm, xd, ext_rec_y);
+    aom_free(ext_rec_y);
+  }
+  for (int pli = 0; pli < 2; pli++) {
+    aom_free(rec_uv[pli]);
+    aom_free(org_uv[pli]);
+  }
+#endif
+
   av1_superres_post_encode(cpi);
 
 #if CONFIG_COLLECT_COMPONENT_TIMING
   start_timing(cpi, loop_restoration_time);
 #endif
+
   if (use_restoration) {
     av1_loop_restoration_save_boundary_lines(&cm->cur_frame->buf, cm, 1);
     av1_pick_filter_restoration(cpi->source, cpi);
@@ -2104,7 +2274,7 @@ static void loopfilter_frame(AV1_COMP *cpi, AV1_COMMON *cm) {
 }
 
 /*!\brief Encode a frame without the recode loop, usually used in one-pass
- * encoding and realtime coding.
+ * encoding.
  *
  * \ingroup high_level_algo
  *
@@ -2134,6 +2304,7 @@ static int encode_without_recode(AV1_COMP *cpi) {
       cpi->use_svc ? svc->downsample_filter_phase[svc->spatial_layer_id] : 0;
 
   set_size_independent_vars(cpi);
+  cpi->source->buf_8bit_valid = 0;
   av1_setup_frame_size(cpi);
   av1_set_size_dependent_vars(cpi, &q, &bottom_index, &top_index);
 
@@ -2158,9 +2329,6 @@ static int encode_without_recode(AV1_COMP *cpi) {
     }
   }
 
-  if (cpi->sf.part_sf.partition_search_type == VAR_BASED_PARTITION)
-    variance_partition_alloc(cpi);
-
   if (cm->current_frame.frame_type == KEY_FRAME) copy_frame_prob_info(cpi);
 
 #if CONFIG_COLLECT_COMPONENT_TIMING
@@ -2181,10 +2349,6 @@ static int encode_without_recode(AV1_COMP *cpi) {
     cpi->last_source = av1_scale_if_required(
         cm, cpi->unscaled_last_source, &cpi->scaled_last_source, filter_scaler,
         phase_scaler, true, false);
-  }
-
-  if (cpi->sf.rt_sf.use_temporal_noise_estimate) {
-    av1_update_noise_estimate(cpi);
   }
 
   // For 1 spatial layer encoding: if the (non-LAST) reference has different
@@ -2218,29 +2382,12 @@ static int encode_without_recode(AV1_COMP *cpi) {
   av1_set_quantizer(cm, q_cfg->qm_minlevel, q_cfg->qm_maxlevel, q,
                     q_cfg->enable_chroma_deltaq);
   av1_set_speed_features_qindex_dependent(cpi, cpi->oxcf.speed);
-  if ((q_cfg->deltaq_mode != NO_DELTA_Q) || q_cfg->enable_chroma_deltaq)
-    av1_init_quantizer(&cpi->enc_quant_dequant_params, &cm->quant_params,
-                       cm->seq_params.bit_depth);
-  av1_set_variance_partition_thresholds(cpi, q, 0);
+#if !CONFIG_EXTQUANT
+  if (q_cfg->deltaq_mode != NO_DELTA_Q || q_cfg->enable_chroma_deltaq)
+#endif
+    av1_init_quantizer(&cm->seq_params, &cpi->enc_quant_dequant_params,
+                       &cm->quant_params);
   av1_setup_frame(cpi);
-
-  // Check if this high_source_sad (scene/slide change) frame should be
-  // encoded at high/max QP, and if so, set the q and adjust some rate
-  // control parameters.
-  if (cpi->sf.rt_sf.overshoot_detection_cbr == FAST_DETECTION_MAXQ &&
-      cpi->rc.high_source_sad) {
-    if (av1_encodedframe_overshoot_cbr(cpi, &q)) {
-      av1_set_quantizer(cm, q_cfg->qm_minlevel, q_cfg->qm_maxlevel, q,
-                        q_cfg->enable_chroma_deltaq);
-      av1_set_speed_features_qindex_dependent(cpi, cpi->oxcf.speed);
-      if (q_cfg->deltaq_mode != NO_DELTA_Q || q_cfg->enable_chroma_deltaq)
-        av1_init_quantizer(&cpi->enc_quant_dequant_params, &cm->quant_params,
-                           cm->seq_params.bit_depth);
-      av1_set_variance_partition_thresholds(cpi, q, 0);
-      if (frame_is_intra_only(cm) || cm->features.error_resilient_mode)
-        av1_setup_frame(cpi);
-    }
-  }
 
   if (q_cfg->aq_mode == CYCLIC_REFRESH_AQ) {
     suppress_active_map(cpi);
@@ -2287,8 +2434,6 @@ static int encode_without_recode(AV1_COMP *cpi) {
   return AOM_CODEC_OK;
 }
 
-#if !CONFIG_REALTIME_ONLY
-
 /*!\brief Recode loop for encoding one frame. the purpose of encoding one frame
  * for multiple times can be approaching a target bitrate or adjusting the usage
  * of global motions.
@@ -2333,9 +2478,6 @@ static int encode_with_recode_loop(AV1_COMP *cpi, size_t *size, uint8_t *dest) {
   av1_set_size_dependent_vars(cpi, &q, &bottom_index, &top_index);
   q_low = bottom_index;
   q_high = top_index;
-
-  if (cpi->sf.part_sf.partition_search_type == VAR_BASED_PARTITION)
-    variance_partition_alloc(cpi);
 
   if (cm->current_frame.frame_type == KEY_FRAME) copy_frame_prob_info(cpi);
 
@@ -2399,11 +2541,11 @@ static int encode_with_recode_loop(AV1_COMP *cpi, size_t *size, uint8_t *dest) {
                       q_cfg->enable_chroma_deltaq);
     av1_set_speed_features_qindex_dependent(cpi, oxcf->speed);
 
+#if !CONFIG_EXTQUANT
     if (q_cfg->deltaq_mode != NO_DELTA_Q || q_cfg->enable_chroma_deltaq)
-      av1_init_quantizer(&cpi->enc_quant_dequant_params, &cm->quant_params,
-                         cm->seq_params.bit_depth);
-
-    av1_set_variance_partition_thresholds(cpi, q, 0);
+#endif
+      av1_init_quantizer(&cm->seq_params, &cpi->enc_quant_dequant_params,
+                         &cm->quant_params);
 
     // printf("Frame %d/%d: q = %d, frame_type = %d superres_denom = %d\n",
     //        cm->current_frame.frame_number, cm->show_frame, q,
@@ -2532,7 +2674,6 @@ static int encode_with_recode_loop(AV1_COMP *cpi, size_t *size, uint8_t *dest) {
 
   return AOM_CODEC_OK;
 }
-#endif  // !CONFIG_REALTIME_ONLY
 
 /*!\brief Recode loop or a single loop for encoding one frame, followed by
  * in-loop deblocking filters, CDEF filters, and restoration filters.
@@ -2560,14 +2701,10 @@ static int encode_with_recode_loop_and_filter(AV1_COMP *cpi, size_t *size,
   start_timing(cpi, encode_with_recode_loop_time);
 #endif
   int err;
-#if CONFIG_REALTIME_ONLY
-  err = encode_without_recode(cpi);
-#else
   if (cpi->sf.hl_sf.recode_loop == DISALLOW_RECODE)
     err = encode_without_recode(cpi);
   else
     err = encode_with_recode_loop(cpi, size, dest);
-#endif
 #if CONFIG_COLLECT_COMPONENT_TIMING
   end_timing(cpi, encode_with_recode_loop_time);
 #endif
@@ -2934,6 +3071,9 @@ static int encode_frame_to_data_rate(AV1_COMP *cpi, size_t *size,
   } else {
     cpi->common.features.cur_frame_force_integer_mv = 0;
   }
+#if CONFIG_NEW_INTER_MODES
+  set_max_drl_bits(cpi);
+#endif  // CONFIG_NEW_INTER_MODES
 
   // Set default state for segment based loop filter update flags.
   cm->lf.mode_ref_delta_update = 0;
@@ -3130,15 +3270,6 @@ static int encode_frame_to_data_rate(AV1_COMP *cpi, size_t *size,
 
   av1_rc_postencode_update(cpi, *size);
 
-  if (oxcf->pass == 0 && !frame_is_intra_only(cm) &&
-      cpi->sf.rt_sf.use_temporal_noise_estimate &&
-      (!cpi->use_svc ||
-       (cpi->use_svc &&
-        !cpi->svc.layer_context[cpi->svc.temporal_layer_id].is_key_frame &&
-        cpi->svc.spatial_layer_id == cpi->svc.number_spatial_layers - 1))) {
-    av1_compute_frame_low_motion(cpi);
-  }
-
   // Clear the one shot update flags for segmentation map and mode/ref loop
   // filter deltas.
   cm->seg.update_map = 0;
@@ -3208,9 +3339,7 @@ int av1_encode(AV1_COMP *const cpi, uint8_t *const dest,
       (1 << (cm->seq_params.order_hint_info.order_hint_bits_minus_1 + 1));
 
   if (is_stat_generation_stage(cpi)) {
-#if !CONFIG_REALTIME_ONLY
     av1_first_pass(cpi, frame_input->ts_duration);
-#endif
   } else {
     if (encode_frame_to_data_rate(cpi, &frame_results->size, dest) !=
         AOM_CODEC_OK) {

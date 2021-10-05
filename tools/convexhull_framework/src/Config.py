@@ -13,6 +13,7 @@ __author__ = "maggie.sun@intel.com, ryanlei@fb.com"
 import os
 import platform
 import AV2CTCVideo
+from AV2CTCVideo import CTC_VERSION
 
 #TEST_CONFIGURATIONS = ["RA","LD", "AS"]
 TEST_CONFIGURATIONS = ["LD", "RA", "AI", "STILL"]
@@ -33,7 +34,22 @@ FrameNum = {
 }
 EnableTimingInfo = True
 UsePerfUtil = False
+EnableMD5 = True
+EnableOpenGOP = False
+EnableTemporalFilter = False
 Platform = platform.system()
+PSNR_Y_WEIGHT = 14.0
+PSNR_U_WEIGHT = 1.0
+PSNR_V_WEIGHT = 1.0
+APSNR_Y_WEIGHT = 4.0
+APSNR_U_WEIGHT = 1.0
+APSNR_V_WEIGHT = 1.0
+if CTC_VERSION == '2.0':
+    CTC_RegularXLSTemplate = os.path.join(BinPath, 'AOM_CWG_Regular_CTC_v7.1.xlsm')
+    CTC_ASXLSTemplate = os.path.join(BinPath, 'AOM_CWG_AS_CTC_v9.7.xlsm')
+else:
+    CTC_RegularXLSTemplate = os.path.join(BinPath, 'AOM_CWG_Regular_CTC_v6.1.xlsm')
+    CTC_ASXLSTemplate = os.path.join(BinPath, 'AOM_CWG_AS_CTC_v9.6.xlsm')
 
 ############ test contents #######################################
 ContentPath = "D://YUVs//AV2-CTC"
@@ -54,23 +70,45 @@ HDRConvert = os.path.join(BinPath, 'HDRConvert.exe')
 AOMScaler = os.path.join(BinPath, 'lanczos_resample_y4m.exe')
 
 ##################### Encode Config ########################################
-EncodeMethods = ["aom", "svt"]
-CodecNames = ["av1", "av2"]
-SUFFIX = {"av1": ".obu", "av2": ".obu"}
+EncodeMethods = ["aom", "svt", "hm"]
+CodecNames = ["av1", "av2", "hevc"]
+SUFFIX = {"av1": ".obu", "av2": ".obu", "hevc":".265"}
 FFMPEG = os.path.join(BinPath, 'ffmpeg.exe')
 AOMENC = os.path.join(BinPath, 'aomenc.exe')
 SVTAV1 = os.path.join(BinPath, 'SvtAv1EncApp.exe')
 AOMDEC = os.path.join(BinPath, 'aomdec.exe')
 AV1ENC = os.path.join(BinPath, 'av1enc.exe')
 AV1DEC = os.path.join(BinPath, 'av1dec.exe')
-QPs = {
-    "LD" : [23, 31, 39, 47, 55, 63],
-    "RA" : [23, 31, 39, 47, 55, 63],
-    "AI" : [15, 23, 31, 39, 47, 55],
-    "AS" : [23, 31, 39, 47, 55, 63],
-    "STILL" : [15, 23, 31, 39, 47, 55],
+HMENC = os.path.join(BinPath, "TAppEncoderStatic.exe")
+HEVCCfgFile = os.path.join(BinPath, "s2-hm-01.cfg")
+
+if CTC_VERSION == '2.0':
+    QPs = {
+        "LD": [110, 135, 160, 185, 210, 235],
+        "RA": [110, 135, 160, 185, 210, 235],
+        "AI": [85, 110, 135, 160, 185, 210],
+        "AS": [110, 135, 160, 185, 210, 235],
+        "STILL": [60, 85, 110, 135, 160, 185],
+    }
+else:
+    QPs = {
+        "LD": [23, 31, 39, 47, 55, 63],
+        "RA": [23, 31, 39, 47, 55, 63],
+        "AI": [15, 23, 31, 39, 47, 55],
+        "AS": [23, 31, 39, 47, 55, 63],
+        "STILL": [15, 23, 31, 39, 47, 55],
+    }
+
+HEVC_QPs = {
+    "LD": [22, 27, 32, 37, 42, 47],
+    "RA": [22, 27, 32, 37, 42, 47],
+    "AI": [22, 27, 32, 37, 42, 47],
+    "AS": [22, 27, 32, 37, 42, 47],
+    "STILL": [22, 27, 32, 37, 42, 47],
 }
 MIN_GOP_LENGTH = 16
+SUB_GOP_SIZE = 16
+GOP_SIZE = 65
 AS_DOWNSCALE_ON_THE_FLY = False
 
 ######################## quality evalution config #############################
@@ -79,6 +117,9 @@ QualityList = ['PSNR_Y','PSNR_U','PSNR_V','SSIM_Y(dB)','MS-SSIM_Y(dB)','VMAF_Y',
 VMAF = os.path.join(BinPath, 'vmaf.exe')
 CalcBDRateInExcel = True
 EnablePreInterpolation = True
+UsePCHIPInterpolation = False
+#InterpolatePieces - 1 is the number of interpolated points generated between two qp points.
+InterpolatePieces = 8
 
 ######################## config for exporting data to excel  #################
 #https://xlsxwriter.readthedocs.io/working_with_colors.html#colors

@@ -21,9 +21,7 @@
 #include "av1/common/mvref_common.h"
 
 #include "av1/encoder/enc_enums.h"
-#if !CONFIG_REALTIME_ONLY
 #include "av1/encoder/partition_cnn_weights.h"
-#endif
 
 #include "av1/encoder/hash.h"
 
@@ -102,6 +100,10 @@ typedef struct {
 typedef struct macroblock_plane {
   //! Stores source - pred so the txfm can be computed later
   DECLARE_ALIGNED(32, int16_t, src_diff[MAX_SB_SQUARE]);
+  //! Temporary buffer for primary transform coeffs
+#if CONFIG_IST
+  DECLARE_ALIGNED(32, int32_t, temp_coeff[4096]);
+#endif
   //! Dequantized coefficients
   tran_low_t *dqcoeff;
   //! Quantized coefficients
@@ -123,6 +125,21 @@ typedef struct macroblock_plane {
    */
   /**@{*/
   //! Quantization step size used by AV1_XFORM_QUANT_FP.
+#if CONFIG_EXTQUANT
+  const int32_t *quant_fp_QTX;
+  //! Offset used for rounding in the quantizer process by AV1_XFORM_QUANT_FP.
+  const int32_t *round_fp_QTX;
+  //! Quantization step size used by AV1_XFORM_QUANT_B.
+  const int32_t *quant_QTX;
+  //! Offset used for rounding in the quantizer process by AV1_XFORM_QUANT_B.
+  const int32_t *round_QTX;
+  //! Scale factor to shift coefficients toward zero. Only used by QUANT_B.
+  const int32_t *quant_shift_QTX;
+  //! Size of the quantization bin around 0. Only Used by QUANT_B
+  const int32_t *zbin_QTX;
+  //! Dequantizer
+  const int32_t *dequant_QTX;
+#else
   const int16_t *quant_fp_QTX;
   //! Offset used for rounding in the quantizer process by AV1_XFORM_QUANT_FP.
   const int16_t *round_fp_QTX;
@@ -136,6 +153,7 @@ typedef struct macroblock_plane {
   const int16_t *zbin_QTX;
   //! Dequantizer
   const int16_t *dequant_QTX;
+#endif  // CONFIG_EXTQUANT
   /**@}*/
 } MACROBLOCK_PLANE;
 
@@ -236,6 +254,10 @@ typedef struct {
   TX_SIZE tx_size;
   //! Txfm sizes used if the current mode is inter mode.
   TX_SIZE inter_tx_size[INTER_TX_SIZE_BUF_LEN];
+#if CONFIG_NEW_TX_PARTITION
+  //! Txfm partitions used if the current mode is inter mode.
+  TX_PARTITION_TYPE partition_type[INTER_TX_SIZE_BUF_LEN];
+#endif  // CONFIG_NEW_TX_PARTITION
   //! Map showing which txfm block skips the txfm process.
   uint8_t blk_skip[MAX_MIB_SIZE * MAX_MIB_SIZE];
   //! Map showing the txfm types for each blcok.
@@ -485,7 +507,6 @@ typedef struct SimpleMotionDataBufs {
  */
 // TODO(chiyotsai@google.com): Consolidate this with SIMPLE_MOTION_DATA_TREE
 typedef struct {
-#if !CONFIG_REALTIME_ONLY
   // The following 4 parameters are used for cnn-based partitioning on intra
   // frame.
   /*! \brief Current index on the partition block quad tree.
@@ -499,7 +520,6 @@ typedef struct {
   float cnn_buffer[CNN_OUT_BUF_SIZE];
   //! log of the quantization parameter of the ancestor BLOCK_64X64.
   float log_q;
-#endif
 
   /*! \brief Variance of the subblocks in the superblock.
    *
@@ -607,6 +627,10 @@ typedef struct {
    * allocates the memory for MACROBLOCKD::tx_type_map during rdopt on the
    * partition block. So if we need to save memory, we could move the allocation
    * to pick_sb_mode instead.
+   * If secondary transform in enabled (CONFIG_IST) each element of the array
+   * stores both primary and secondary transform types as shown below: Bits 4~5
+   * of each element stores secondary tx_type Bits 0~3 of each element stores
+   * primary tx_type
    */
   uint8_t tx_type_map_[MAX_MIB_SIZE * MAX_MIB_SIZE];
 
@@ -694,12 +718,33 @@ typedef struct {
   int filter_intra_cost[BLOCK_SIZES_ALL][2];
   //! filter_intra_mode_cost
   int filter_intra_mode_cost[FILTER_INTRA_MODES];
-  //! angle_delta_cost
 #if CONFIG_SDP
+  //! angle_delta_cost
   int angle_delta_cost[PARTITION_STRUCTURE_NUM][DIRECTIONAL_MODES]
                       [2 * MAX_ANGLE_DELTA + 1];
+#if CONFIG_ORIP
+  //! angle_delta_cost_hv
+  int angle_delta_cost_hv[PARTITION_STRUCTURE_NUM][TOTAL_NUM_ORIP_ANGLE_DELTA]
+                         [2 * MAX_ANGLE_DELTA + 1 + ADDITIONAL_ANGLE_DELTA];
+#endif
 #else
+#if CONFIG_ORIP
+  //! angle_delta_cost_hv
+  int angle_delta_cost_hv[TOTAL_NUM_ORIP_ANGLE_DELTA]
+                         [2 * MAX_ANGLE_DELTA + 1 + ADDITIONAL_ANGLE_DELTA];
+#endif
+  //! angle_delta_cost
   int angle_delta_cost[DIRECTIONAL_MODES][2 * MAX_ANGLE_DELTA + 1];
+#endif
+
+#if CONFIG_MRLS
+  //! mrl_index_cost
+  int mrl_index_cost[MRL_LINE_NUMBER];
+#endif
+
+#if CONFIG_IST
+  //! Cost of signaling secondary transform index
+  int stx_flag_cost[TX_SIZES][STX_TYPES];
 #endif
 
   //! Rate rate associated with each alpha codeword
@@ -735,6 +780,12 @@ typedef struct {
   /**@{*/
   //! skip_mode_cost
   int skip_mode_cost[SKIP_MODE_CONTEXTS][2];
+#if CONFIG_NEW_INTER_MODES
+  //! inter single mode cost
+  int inter_single_mode_cost[INTER_SINGLE_MODE_CONTEXTS][INTER_SINGLE_MODES];
+  //! drl_mode_cost
+  int drl_mode_cost[3][DRL_MODE_CONTEXTS][2];
+#else
   //! newmv_mode_cost
   int newmv_mode_cost[NEWMV_MODE_CONTEXTS][2];
   //! zeromv_mode_cost
@@ -743,6 +794,7 @@ typedef struct {
   int refmv_mode_cost[REFMV_MODE_CONTEXTS][2];
   //! drl_mode_cost0
   int drl_mode_cost0[DRL_MODE_CONTEXTS][2];
+#endif  // CONFIG_NEW_INTER_MODES
   /**@}*/
 
   /*****************************************************************************
@@ -822,10 +874,25 @@ typedef struct {
   /**@{*/
   //! skip_txfm_cost
   int skip_txfm_cost[SKIP_CONTEXTS][2];
+#if CONFIG_NEW_TX_PARTITION
+  //! intra_4way_txfm_partition_cost
+  int intra_4way_txfm_partition_cost[2][TX_SIZE_CONTEXTS][4];
+  //! intra_2way_txfm_partition_cost
+  int intra_2way_txfm_partition_cost[2];
+  //! intra_2way_rect_txfm_partition_cost
+  int intra_2way_rect_txfm_partition_cost[2];
+  //! inter_4way_txfm_partition_cost
+  int inter_4way_txfm_partition_cost[2][TXFM_PARTITION_INTER_CONTEXTS][4];
+  //! inter_2way_txfm_partition_cost
+  int inter_2way_txfm_partition_cost[2];
+  //! inter_2way_rect_txfm_partition_cost
+  int inter_2way_rect_txfm_partition_cost[2];
+#else   // CONFIG_NEW_TX_PARTITION
   //! tx_size_cost
   int tx_size_cost[TX_SIZES - 1][TX_SIZE_CONTEXTS][TX_SIZES];
   //! txfm_partition_cost
   int txfm_partition_cost[TXFM_PARTITION_CONTEXTS][2];
+#endif  // CONFIG_NEW_TX_PARTITION
   //! inter_tx_type_costs
   int inter_tx_type_costs[EXT_TX_SETS_INTER][EXT_TX_SIZES][TX_TYPES];
   //! intra_tx_type_costs
@@ -1051,13 +1118,6 @@ typedef struct macroblock {
   //! Information on a whole superblock level.
   // TODO(chiyotsai@google.com): Refactor this out of macroblock
   SuperBlockEnc sb_enc;
-
-  /*! \brief Characteristics of the current superblock.
-   *
-   *  Characteristics like whether the block has high sad, low sad, etc. This is
-   *  only used by av1 realtime mode.
-   */
-  uint8_t content_state_sb;
   /**@}*/
 
   /*****************************************************************************
@@ -1088,14 +1148,6 @@ typedef struct macroblock {
    */
   int picked_ref_frames_mask[MAX_MIB_SIZE * MAX_MIB_SIZE];
 
-  /*! \brief Prune ref frames in real-time mode.
-   *
-   * Determines whether to prune reference frames in real-time mode. For the
-   * most part, this is the same as nonrd_prune_ref_frame_search in
-   * cpi->sf.rt_sf.nonrd_prune_ref_frame_search, but this can be selectively
-   * turned off if the only frame available is GOLDEN_FRAME.
-   */
-  int nonrd_prune_ref_frame_search;
   /**@}*/
 
   /*****************************************************************************
@@ -1235,13 +1287,6 @@ typedef struct macroblock {
    * facilitate rdopt.
    */
   TxfmSearchInfo txfm_search_info;
-
-  /*! \brief Whether there is a strong color activity.
-   *
-   * Used in REALTIME coding mode to enhance the visual quality at the boundary
-   * of moving color objects.
-   */
-  uint8_t color_sensitivity[2];
   /**@}*/
 
   /*****************************************************************************
@@ -1267,6 +1312,30 @@ typedef struct macroblock {
 /*!\cond */
 static INLINE int is_rect_tx_allowed_bsize(BLOCK_SIZE bsize) {
   static const char LUT[BLOCK_SIZES_ALL] = {
+#if CONFIG_NEW_TX_PARTITION
+    0,  // BLOCK_4X4
+    1,  // BLOCK_4X8
+    1,  // BLOCK_8X4
+    1,  // BLOCK_8X8
+    1,  // BLOCK_8X16
+    1,  // BLOCK_16X8
+    1,  // BLOCK_16X16
+    1,  // BLOCK_16X32
+    1,  // BLOCK_32X16
+    1,  // BLOCK_32X32
+    1,  // BLOCK_32X64
+    1,  // BLOCK_64X32
+    1,  // BLOCK_64X64
+    1,  // BLOCK_64X128
+    1,  // BLOCK_128X64
+    1,  // BLOCK_128X128
+    1,  // BLOCK_4X16
+    1,  // BLOCK_16X4
+    1,  // BLOCK_8X32
+    1,  // BLOCK_32X8
+    1,  // BLOCK_16X64
+    1,  // BLOCK_64X16
+#else
     0,  // BLOCK_4X4
     1,  // BLOCK_4X8
     1,  // BLOCK_8X4
@@ -1289,6 +1358,7 @@ static INLINE int is_rect_tx_allowed_bsize(BLOCK_SIZE bsize) {
     1,  // BLOCK_32X8
     1,  // BLOCK_16X64
     1,  // BLOCK_64X16
+#endif  // CONFIG_NEW_TX_PARTITION
   };
 
   return LUT[bsize];
@@ -1306,6 +1376,7 @@ static INLINE int is_rect_tx_allowed(const MACROBLOCKD *xd,
 #endif
 }
 
+#if !CONFIG_IST && !CONFIG_NEW_TX_PARTITION
 static INLINE int tx_size_to_depth(TX_SIZE tx_size, BLOCK_SIZE bsize) {
   TX_SIZE ctx_size = max_txsize_rect_lookup[bsize];
   int depth = 0;
@@ -1316,6 +1387,7 @@ static INLINE int tx_size_to_depth(TX_SIZE tx_size, BLOCK_SIZE bsize) {
   }
   return depth;
 }
+#endif
 
 static INLINE void set_blk_skip(uint8_t txb_skip[], int plane, int blk_idx,
                                 int skip) {

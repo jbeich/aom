@@ -124,23 +124,45 @@ set_aom_config_var(CONFIG_COLLECT_COMPONENT_TIMING 0
                    "Collect encoding component timing information.")
 set_aom_config_var(CONFIG_LPF_MASK 0
                    "Enable the use loop filter bitmasks for optimizations.")
-set_aom_config_var(CONFIG_REALTIME_ONLY 0
-                   "Build for RTC-only to reduce binary size.")
 set_aom_config_var(CONFIG_AV1_TEMPORAL_DENOISING 0
                    "Build with temporal denoising support.")
 set_aom_config_var(CONFIG_NN_V2 0 "Fully-connected neural nets ver.2.")
 set_aom_config_var(CONFIG_OPTICAL_FLOW_API 0
                    "AV1 experiment flag for optical flow API.")
+set_aom_config_var(CONFIG_AV2CTC_PSNR_PEAK 1
+                   "Use AV2 CTC type PSNR peak for 10- and 12-bit")
+set_aom_config_var(CONFIG_ZERO_OFFSET_BITUPSHIFT 0
+                   "Use zero offset for non-normative bit upshift")
 
 # AV2 experiment flags.
 set_aom_config_var(CONFIG_REMOVE_DIST_WTD_COMP 1
                    "AV2 experiment flag to remove dist_wtd_comp tool.")
 set_aom_config_var(CONFIG_REMOVE_DUAL_FILTER 1
                    "AV2 experiment flag to remove dual filter.")
-set_aom_config_var(CONFIG_SDP 1 NUMBER "AV2 Semi-Decoupled Partitioning.")
 set_aom_config_var(CONFIG_EXT_RECUR_PARTITIONS 0 NUMBER
                    "AV2 Fully recursive partitions experiment flag")
-
+set_aom_config_var(CONFIG_SDP 1 NUMBER "AV2 Semi-Decoupled Partitioning.")
+set_aom_config_var(CONFIG_EXTQUANT 1
+                   "AV2 extended quantization experiment flag")
+set_aom_config_var(CONFIG_COMPOUND_WARP_SAMPLES 1 NUMBER
+                   "AV2 compound warped motion samples experiment flag")
+set_aom_config_var(CONFIG_NEW_TX_PARTITION 0
+                   "AV2 new transform partitions experiment flag.")
+set_aom_config_var(
+  CONFIG_MRLS 1 "AV2 experiment flag to enable multiple line intra prediction.")
+set_aom_config_var(
+  CONFIG_ORIP 1
+  "AV2 experiment flag to enable offset based refinement of intra prediction.")
+set_aom_config_var(CONFIG_IST 1 NUMBER
+                   "AV2 experiment flag to enable intra secondary transform.")
+set_aom_config_var(CONFIG_NEW_INTER_MODES 1 NUMBER
+                   "AV2 inter mode consolidation experiment flag")
+set_aom_config_var(CONFIG_SMVP_IMPROVEMENT 1 "Enable SMVP improvement")
+set_aom_config_var(CONFIG_TMVP_IMPROVEMENT 1 "Enable TMVP improvement")
+set_aom_config_var(
+  CONFIG_CCSO 1 "AV2 experiment flag to enable cross component sample offset.")
+set_aom_config_var(CONFIG_QBASED_QP_OFFSET 1
+                   "AV2 experiment flag to adjust q_offset based on QP.")
 #
 # Variables in this section control optional features of the build system.
 #

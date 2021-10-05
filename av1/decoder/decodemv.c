@@ -143,6 +143,40 @@ static void read_cdef(AV1_COMMON *cm, aom_reader *r, MACROBLOCKD *const xd) {
 #endif  // CONFIG_EXT_RECUR_PARTITIONS
 }
 
+#if CONFIG_CCSO
+static void read_ccso(AV1_COMMON *cm, aom_reader *r, MACROBLOCKD *const xd) {
+  if (cm->features.coded_lossless) return;
+  if (cm->features.allow_intrabc) return;
+  const CommonModeInfoParams *const mi_params = &cm->mi_params;
+  const int mi_row = xd->mi_row;
+  const int mi_col = xd->mi_col;
+  const int blk_size_y =
+      (1 << (CCSO_BLK_SIZE + xd->plane[1].subsampling_y - MI_SIZE_LOG2)) - 1;
+  const int blk_size_x =
+      (1 << (CCSO_BLK_SIZE + xd->plane[1].subsampling_x - MI_SIZE_LOG2)) - 1;
+
+  if (!(mi_row & blk_size_y) && !(mi_col & blk_size_x) &&
+      cm->ccso_info.ccso_enable[0]) {
+    const int blk_idc = aom_read_bit(r, ACCT_STR);
+    xd->ccso_blk_u = blk_idc;
+    mi_params
+        ->mi_grid_base[(mi_row & ~blk_size_y) * mi_params->mi_stride +
+                       (mi_col & ~blk_size_x)]
+        ->ccso_blk_u = blk_idc;
+  }
+
+  if (!(mi_row & blk_size_y) && !(mi_col & blk_size_x) &&
+      cm->ccso_info.ccso_enable[1]) {
+    const int blk_idc = aom_read_bit(r, ACCT_STR);
+    xd->ccso_blk_v = blk_idc;
+    mi_params
+        ->mi_grid_base[(mi_row & ~blk_size_y) * mi_params->mi_stride +
+                       (mi_col & ~blk_size_x)]
+        ->ccso_blk_v = blk_idc;
+  }
+}
+#endif
+
 static int read_delta_qindex(AV1_COMMON *cm, const MACROBLOCKD *xd,
                              aom_reader *r, MB_MODE_INFO *const mbmi) {
   int sign, abs, reduced_delta_qindex = 0;
@@ -218,6 +252,14 @@ static int read_delta_lflevel(const AV1_COMMON *const cm, aom_reader *r,
   return reduced_delta_lflevel;
 }
 
+#if CONFIG_MRLS
+static uint8_t read_mrl_index(FRAME_CONTEXT *ec_ctx, aom_reader *r) {
+  const uint8_t mrl_index =
+      aom_read_symbol(r, ec_ctx->mrl_index_cdf, MRL_LINE_NUMBER, ACCT_STR);
+  return mrl_index;
+}
+#endif
+
 static UV_PREDICTION_MODE read_intra_mode_uv(FRAME_CONTEXT *ec_ctx,
                                              aom_reader *r,
                                              CFL_ALLOWED_TYPE cfl_allowed,
@@ -257,6 +299,12 @@ static INTERINTRA_MODE read_interintra_mode(MACROBLOCKD *xd, aom_reader *r,
 
 static PREDICTION_MODE read_inter_mode(FRAME_CONTEXT *ec_ctx, aom_reader *r,
                                        int16_t ctx) {
+#if CONFIG_NEW_INTER_MODES
+  const int16_t ismode_ctx = inter_single_mode_ctx(ctx);
+  return SINGLE_INTER_MODE_START +
+         aom_read_symbol(r, ec_ctx->inter_single_mode_cdf[ismode_ctx],
+                         INTER_SINGLE_MODES, ACCT_STR);
+#else
   int16_t mode_ctx = ctx & NEWMV_CTX_MASK;
   int is_newmv, is_zeromv, is_refmv;
   is_newmv = aom_read_symbol(r, ec_ctx->newmv_cdf[mode_ctx], 2, ACCT_STR) == 0;
@@ -273,15 +321,34 @@ static PREDICTION_MODE read_inter_mode(FRAME_CONTEXT *ec_ctx, aom_reader *r,
     return NEARESTMV;
   else
     return NEARMV;
+#endif  // CONFIG_NEW_INTER_MODES
 }
 
+#if CONFIG_NEW_INTER_MODES
+static void read_drl_idx(int max_drl_bits, const int16_t mode_ctx,
+                         FRAME_CONTEXT *ec_ctx, DecoderCodingBlock *dcb,
+                         MB_MODE_INFO *mbmi, aom_reader *r) {
+  MACROBLOCKD *const xd = &dcb->xd;
+  uint8_t ref_frame_type = av1_ref_frame_type(mbmi->ref_frame);
+  mbmi->ref_mv_idx = 0;
+  assert(!mbmi->skip_mode);
+  for (int idx = 0; idx < max_drl_bits; ++idx) {
+    aom_cdf_prob *drl_cdf =
+        av1_get_drl_cdf(ec_ctx, xd->weight[ref_frame_type], mode_ctx, idx);
+    int drl_idx = aom_read_symbol(r, drl_cdf, 2, ACCT_STR);
+    mbmi->ref_mv_idx = idx + drl_idx;
+    if (!drl_idx) break;
+  }
+  assert(mbmi->ref_mv_idx < max_drl_bits + 1);
+}
+#else
 static void read_drl_idx(FRAME_CONTEXT *ec_ctx, DecoderCodingBlock *dcb,
                          MB_MODE_INFO *mbmi, aom_reader *r) {
   MACROBLOCKD *const xd = &dcb->xd;
   uint8_t ref_frame_type = av1_ref_frame_type(mbmi->ref_frame);
   mbmi->ref_mv_idx = 0;
   if (mbmi->mode == NEWMV || mbmi->mode == NEW_NEWMV) {
-    for (int idx = 0; idx < 2; ++idx) {
+    for (int idx = 0; idx < MAX_DRL_BITS; ++idx) {
       if (dcb->ref_mv_count[ref_frame_type] > idx + 1) {
         uint8_t drl_ctx = av1_drl_ctx(xd->weight[ref_frame_type], idx);
         int drl_idx = aom_read_symbol(r, ec_ctx->drl_cdf[drl_ctx], 2, ACCT_STR);
@@ -294,7 +361,7 @@ static void read_drl_idx(FRAME_CONTEXT *ec_ctx, DecoderCodingBlock *dcb,
     // Offset the NEARESTMV mode.
     // TODO(jingning): Unify the two syntax decoding loops after the NEARESTMV
     // mode is factored in.
-    for (int idx = 1; idx < 3; ++idx) {
+    for (int idx = 1; idx < MAX_DRL_BITS + 1; ++idx) {
       if (dcb->ref_mv_count[ref_frame_type] > idx + 1) {
         uint8_t drl_ctx = av1_drl_ctx(xd->weight[ref_frame_type], idx);
         int drl_idx = aom_read_symbol(r, ec_ctx->drl_cdf[drl_ctx], 2, ACCT_STR);
@@ -304,6 +371,7 @@ static void read_drl_idx(FRAME_CONTEXT *ec_ctx, DecoderCodingBlock *dcb,
     }
   }
 }
+#endif  // CONFIG_NEW_INTER_MODES
 
 static MOTION_MODE read_motion_mode(AV1_COMMON *cm, MACROBLOCKD *xd,
                                     MB_MODE_INFO *mbmi, aom_reader *r) {
@@ -344,8 +412,13 @@ static PREDICTION_MODE read_inter_compound_mode(MACROBLOCKD *xd, aom_reader *r,
   const int mode =
       aom_read_symbol(r, xd->tile_ctx->inter_compound_mode_cdf[ctx],
                       INTER_COMPOUND_MODES, ACCT_STR);
+#if CONFIG_NEW_INTER_MODES
+  assert(is_inter_compound_mode(NEAR_NEARMV + mode));
+  return NEAR_NEARMV + mode;
+#else
   assert(is_inter_compound_mode(NEAREST_NEARESTMV + mode));
   return NEAREST_NEARESTMV + mode;
+#endif  // CONFIG_NEW_INTER_MODES
 }
 
 int av1_neg_deinterleave(int diff, int ref, int max) {
@@ -715,6 +788,14 @@ static void read_palette_mode_info(AV1_COMMON *const cm, MACROBLOCKD *const xd,
   }
 }
 
+#if CONFIG_ORIP
+static int read_angle_delta_hv(aom_reader *r, aom_cdf_prob *cdf) {
+  const int sym = aom_read_symbol(
+      r, cdf, 2 * MAX_ANGLE_DELTA + 1 + ADDITIONAL_ANGLE_DELTA, ACCT_STR);
+  return get_idx_to_angle_delta(sym);
+}
+#endif
+
 static int read_angle_delta(aom_reader *r, aom_cdf_prob *cdf) {
   const int sym = aom_read_symbol(r, cdf, 2 * MAX_ANGLE_DELTA + 1, ACCT_STR);
   return sym - MAX_ANGLE_DELTA;
@@ -799,6 +880,54 @@ void av1_read_tx_type(const AV1_COMMON *const cm, MACROBLOCKD *xd, int blk_row,
     }
   }
 }
+
+#if CONFIG_IST
+void av1_read_sec_tx_type(const AV1_COMMON *const cm, MACROBLOCKD *xd,
+                          int blk_row, int blk_col, TX_SIZE tx_size,
+                          uint16_t *eob, aom_reader *r) {
+  MB_MODE_INFO *mbmi = xd->mi[0];
+  uint8_t *tx_type =
+      &xd->tx_type_map[blk_row * xd->tx_type_map_stride + blk_col];
+
+  // No need to read transform type if block is skipped.
+#if CONFIG_SDP
+  if (mbmi->skip_txfm[xd->tree_type == CHROMA_PART] ||
+#else
+  if (mbmi->skip_txfm ||
+#endif
+      segfeature_active(&cm->seg, mbmi->segment_id, SEG_LVL_SKIP))
+    return;
+
+  // No need to read transform type for lossless mode(qindex==0).
+  const int qindex = xd->qindex[mbmi->segment_id];
+  if (qindex == 0) return;
+#if CONFIG_SDP
+  const int inter_block = is_inter_block(mbmi, xd->tree_type);
+#else
+  const int inter_block = is_inter_block(mbmi);
+#endif
+  if (get_ext_tx_types(tx_size, inter_block, cm->features.reduced_tx_set_used) >
+      1) {
+    FRAME_CONTEXT *ec_ctx = xd->tile_ctx;
+    const TX_SIZE square_tx_size = txsize_sqr_map[tx_size];
+    if (!inter_block) {
+      if (block_signals_sec_tx_type(xd, tx_size, *tx_type, *eob)) {
+        const uint8_t stx_flag = aom_read_symbol(
+            r, ec_ctx->stx_cdf[square_tx_size], STX_TYPES, ACCT_STR);
+        *tx_type |= (stx_flag << 4);
+      }
+    }
+  } else if (!inter_block) {
+    FRAME_CONTEXT *ec_ctx = xd->tile_ctx;
+    const TX_SIZE square_tx_size = txsize_sqr_map[tx_size];
+    if (block_signals_sec_tx_type(xd, tx_size, *tx_type, *eob)) {
+      const uint8_t stx_flag = aom_read_symbol(
+          r, ec_ctx->stx_cdf[square_tx_size], STX_TYPES, ACCT_STR);
+      *tx_type |= (stx_flag << 4);
+    }
+  }
+}
+#endif
 
 static INLINE void read_mv(aom_reader *r, MV *mv, const MV *ref,
                            nmv_context *ctx, MvSubpelPrecision precision);
@@ -889,7 +1018,15 @@ static void read_delta_q_params(AV1_COMMON *const cm, MACROBLOCKD *const xd,
     xd->current_base_qindex +=
         read_delta_qindex(cm, xd, r, mbmi) * delta_q_info->delta_q_res;
     /* Normative: Clamp to [1,MAXQ] to not interfere with lossless mode */
+#if CONFIG_EXTQUANT
+    xd->current_base_qindex = clamp(
+        xd->current_base_qindex, 1,
+        cm->seq_params.bit_depth == AOM_BITS_8
+            ? MAXQ_8_BITS
+            : cm->seq_params.bit_depth == AOM_BITS_10 ? MAXQ_10_BITS : MAXQ);
+#else
     xd->current_base_qindex = clamp(xd->current_base_qindex, 1, MAXQ);
+#endif
     FRAME_CONTEXT *const ec_ctx = xd->tile_ctx;
     if (delta_q_info->delta_lf_present_flag) {
       const int mi_row = xd->mi_row;
@@ -967,6 +1104,15 @@ static void read_intra_frame_mode_info(AV1_COMMON *const cm,
 #endif
     read_cdef(cm, r, xd);
 
+#if CONFIG_CCSO
+  if (cm->seq_params.enable_ccso
+#if CONFIG_SDP
+      && xd->tree_type != LUMA_PART
+#endif
+  )
+    read_ccso(cm, r, xd);
+#endif
+
   read_delta_q_params(cm, xd, r);
 
   mbmi->current_qindex = xd->current_base_qindex;
@@ -1004,20 +1150,67 @@ static void read_intra_frame_mode_info(AV1_COMMON *const cm,
   const int use_angle_delta = av1_use_angle_delta(bsize);
 #if CONFIG_SDP
   if (xd->tree_type != CHROMA_PART) {
+#endif  // CONFIG_SDP
     mbmi->mode = read_intra_mode(r, get_y_mode_cdf(ec_ctx, above_mi, left_mi));
-    mbmi->angle_delta[PLANE_TYPE_Y] =
-        (use_angle_delta && av1_is_directional_mode(mbmi->mode))
-            ? read_angle_delta(
-                  r, ec_ctx->angle_delta_cdf[PLANE_TYPE_Y][mbmi->mode - V_PRED])
+#if CONFIG_ORIP
+#if CONFIG_MRLS
+    // when both ORIP and MRLS are enabled, mrl index are signalled right after
+    // intra mode and before angle delta
+    // Parsing reference line index
+    mbmi->mrl_index =
+        (cm->seq_params.enable_mrls && av1_is_directional_mode(mbmi->mode))
+            ? read_mrl_index(ec_ctx, r)
             : 0;
-  }
+#endif  // CONFIG_MRLS
+
+    if (use_angle_delta && av1_is_directional_mode(mbmi->mode)) {
+      int signal_intra_filter =
+          av1_signal_orip_for_horver_modes(cm, mbmi, PLANE_TYPE_Y, bsize);
+      aom_cdf_prob *anglecdf =
+          signal_intra_filter
+#if CONFIG_SDP
+              ? ec_ctx->angle_delta_cdf_hv[PLANE_TYPE_Y][mbmi->mode - V_PRED]
+              : ec_ctx->angle_delta_cdf[PLANE_TYPE_Y][mbmi->mode - V_PRED];
 #else
-  mbmi->mode = read_intra_mode(r, get_y_mode_cdf(ec_ctx, above_mi, left_mi));
+              ? ec_ctx->angle_delta_cdf_hv[mbmi->mode - V_PRED]
+              : ec_ctx->angle_delta_cdf[mbmi->mode - V_PRED];
+#endif  // CONFIG_SDP
+
+      mbmi->angle_delta[PLANE_TYPE_Y] = signal_intra_filter
+                                            ? read_angle_delta_hv(r, anglecdf)
+                                            : read_angle_delta(r, anglecdf);
+    } else {
+      mbmi->angle_delta[PLANE_TYPE_Y] = 0;
+    }
+#elif CONFIG_SDP
   mbmi->angle_delta[PLANE_TYPE_Y] =
       (use_angle_delta && av1_is_directional_mode(mbmi->mode))
-          ? read_angle_delta(r, ec_ctx->angle_delta_cdf[mbmi->mode - V_PRED])
+          ? read_angle_delta(
+                r, ec_ctx->angle_delta_cdf[PLANE_TYPE_Y][mbmi->mode - V_PRED])
           : 0;
+#else
+mbmi->angle_delta[PLANE_TYPE_Y] =
+    (use_angle_delta && av1_is_directional_mode(mbmi->mode))
+        ? read_angle_delta(r, ec_ctx->angle_delta_cdf[mbmi->mode - V_PRED])
+        : 0;
+#endif  // CONFIG_ORIP
+
+#if CONFIG_MRLS && !CONFIG_ORIP
+    // When both ORIP and MRLS are enabled, mrl index are signalled right after
+    // intra mode and before angle delta
+    // However when MRLS is enabled but ORIP is disabled, mrl_index is signalled
+    // here ( after angle delta)
+    // Parsing reference line index
+    mbmi->mrl_index =
+        (cm->seq_params.enable_mrls && av1_is_directional_mode(mbmi->mode))
+            ? read_mrl_index(ec_ctx, r)
+            : 0;
 #endif
+
+#if CONFIG_SDP
+  }
+#endif  // CONFIG_SDP
+
 #if CONFIG_SDP
   if (xd->tree_type != LUMA_PART) {
 #endif
@@ -1119,7 +1312,6 @@ static INLINE void read_mv(aom_reader *r, MV *mv, const MV *ref,
   MV diff = kZeroMv;
   const MV_JOINT_TYPE joint_type =
       (MV_JOINT_TYPE)aom_read_symbol(r, ctx->joints_cdf, MV_JOINTS, ACCT_STR);
-
   if (mv_joint_vertical(joint_type))
     diff.row = read_mv_component(r, &ctx->comps[0], precision > MV_SUBPEL_NONE,
                                  precision > MV_SUBPEL_LOW_PRECISION);
@@ -1304,7 +1496,8 @@ static INLINE void read_mb_interp_filter(const MACROBLOCKD *const xd,
         break;
       }
     }
-    // The index system works as: (0, 1) -> (vertical, horizontal) filter types
+    // The index system works as: (0, 1) -> (vertical, horizontal) filter
+    // types
     mbmi->interp_filters.as_filters.x_filter = ref0_filter[1];
     mbmi->interp_filters.as_filters.y_filter = ref0_filter[0];
 #endif  // CONFIG_REMOVE_DUAL_FILTER
@@ -1328,7 +1521,38 @@ static void read_intra_block_mode_info(AV1_COMMON *const cm,
   FRAME_CONTEXT *ec_ctx = xd->tile_ctx;
 
   mbmi->mode = read_intra_mode(r, ec_ctx->y_mode_cdf[size_group_lookup[bsize]]);
+
+#if CONFIG_MRLS && CONFIG_ORIP
 #if CONFIG_SDP
+  if (xd->tree_type != CHROMA_PART)
+#endif
+    // Parsing reference line index
+    mbmi->mrl_index =
+        (cm->seq_params.enable_mrls && av1_is_directional_mode(mbmi->mode))
+            ? read_mrl_index(ec_ctx, r)
+            : 0;
+#endif
+
+#if CONFIG_ORIP
+  if (use_angle_delta && av1_is_directional_mode(mbmi->mode)) {
+    int signal_intra_filter =
+        av1_signal_orip_for_horver_modes(cm, mbmi, PLANE_TYPE_Y, bsize);
+    aom_cdf_prob *anglecdf =
+        signal_intra_filter
+#if CONFIG_SDP
+            ? ec_ctx->angle_delta_cdf_hv[PLANE_TYPE_Y][mbmi->mode - V_PRED]
+            : ec_ctx->angle_delta_cdf[PLANE_TYPE_Y][mbmi->mode - V_PRED];
+#else
+            ? ec_ctx->angle_delta_cdf_hv[mbmi->mode - V_PRED]
+            : ec_ctx->angle_delta_cdf[mbmi->mode - V_PRED];
+#endif
+    mbmi->angle_delta[PLANE_TYPE_Y] = signal_intra_filter
+                                          ? read_angle_delta_hv(r, anglecdf)
+                                          : read_angle_delta(r, anglecdf);
+  } else {
+    mbmi->angle_delta[PLANE_TYPE_Y] = 0;
+  }
+#elif CONFIG_SDP
   mbmi->angle_delta[PLANE_TYPE_Y] =
       use_angle_delta && av1_is_directional_mode(mbmi->mode)
           ? read_angle_delta(
@@ -1339,7 +1563,19 @@ static void read_intra_block_mode_info(AV1_COMMON *const cm,
       use_angle_delta && av1_is_directional_mode(mbmi->mode)
           ? read_angle_delta(r, ec_ctx->angle_delta_cdf[mbmi->mode - V_PRED])
           : 0;
+#endif  // CONFIG_ORIP
+
+#if CONFIG_MRLS && !CONFIG_ORIP
+#if CONFIG_SDP
+  if (xd->tree_type != CHROMA_PART)
 #endif
+    // Parsing reference line index
+    mbmi->mrl_index =
+        (cm->seq_params.enable_mrls && av1_is_directional_mode(mbmi->mode))
+            ? read_mrl_index(ec_ctx, r)
+            : 0;
+#endif
+
   if (!cm->seq_params.monochrome && xd->is_chroma_ref) {
     mbmi->uv_mode =
         read_intra_mode_uv(ec_ctx, r, is_cfl_allowed(xd), mbmi->mode);
@@ -1403,6 +1639,10 @@ static INLINE int assign_mv(AV1_COMMON *cm, MACROBLOCKD *xd,
                             int_mv ref_mv[2], int_mv nearest_mv[2],
                             int_mv near_mv[2], int is_compound, int allow_hp,
                             aom_reader *r) {
+#if CONFIG_NEW_INTER_MODES
+  (void)nearest_mv;
+#endif  // CONFIG_NEW_INTER_MODES
+
   FRAME_CONTEXT *ec_ctx = xd->tile_ctx;
   MB_MODE_INFO *mbmi = xd->mi[0];
 #if CONFIG_SDP
@@ -1420,10 +1660,12 @@ static INLINE int assign_mv(AV1_COMMON *cm, MACROBLOCKD *xd,
       read_mv(r, &mv[0].as_mv, &ref_mv[0].as_mv, nmvc, allow_hp);
       break;
     }
+#if !CONFIG_NEW_INTER_MODES
     case NEARESTMV: {
       mv[0].as_int = nearest_mv[0].as_int;
       break;
     }
+#endif  // !CONFIG_NEW_INTER_MODES
     case NEARMV: {
       mv[0].as_int = near_mv[0].as_int;
       break;
@@ -1444,18 +1686,21 @@ static INLINE int assign_mv(AV1_COMMON *cm, MACROBLOCKD *xd,
       }
       break;
     }
+#if !CONFIG_NEW_INTER_MODES
     case NEAREST_NEARESTMV: {
       assert(is_compound);
       mv[0].as_int = nearest_mv[0].as_int;
       mv[1].as_int = nearest_mv[1].as_int;
       break;
     }
+#endif  // !CONFIG_NEW_INTER_MODES
     case NEAR_NEARMV: {
       assert(is_compound);
       mv[0].as_int = near_mv[0].as_int;
       mv[1].as_int = near_mv[1].as_int;
       break;
     }
+#if !CONFIG_NEW_INTER_MODES
     case NEW_NEARESTMV: {
       nmv_context *const nmvc = &ec_ctx->nmvc;
       read_mv(r, &mv[0].as_mv, &ref_mv[0].as_mv, nmvc, allow_hp);
@@ -1470,6 +1715,7 @@ static INLINE int assign_mv(AV1_COMMON *cm, MACROBLOCKD *xd,
       assert(is_compound);
       break;
     }
+#endif  // !CONFIG_NEW_INTER_MODES
     case NEAR_NEWMV: {
       nmv_context *const nmvc = &ec_ctx->nmvc;
       mv[0].as_int = near_mv[0].as_int;
@@ -1594,21 +1840,30 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
 
   if (mbmi->skip_mode) {
     assert(is_compound);
+#if CONFIG_NEW_INTER_MODES
+    mbmi->mode = NEAR_NEARMV;
+    mbmi->ref_mv_idx = 0;
+#else
     mbmi->mode = NEAREST_NEARESTMV;
+#endif  // !CONFIG_NEW_INTER_MODES
   } else {
     if (segfeature_active(&cm->seg, mbmi->segment_id, SEG_LVL_SKIP) ||
         segfeature_active(&cm->seg, mbmi->segment_id, SEG_LVL_GLOBALMV)) {
       mbmi->mode = GLOBALMV;
     } else {
-      const int mode_ctx =
+      const int16_t mode_ctx =
           av1_mode_context_analyzer(inter_mode_ctx, mbmi->ref_frame);
       if (is_compound)
         mbmi->mode = read_inter_compound_mode(xd, r, mode_ctx);
       else
         mbmi->mode = read_inter_mode(ec_ctx, r, mode_ctx);
-      if (mbmi->mode == NEWMV || mbmi->mode == NEW_NEWMV ||
-          have_nearmv_in_inter_mode(mbmi->mode))
-        read_drl_idx(ec_ctx, dcb, mbmi, r);
+      if (have_drl_index(mbmi->mode))
+        read_drl_idx(
+#if CONFIG_NEW_INTER_MODES
+            cm->features.max_drl_bits,
+            av1_mode_context_pristine(inter_mode_ctx, mbmi->ref_frame),
+#endif  // CONFIG_NEW_INTER_MODES
+            ec_ctx, dcb, mbmi, r);
     }
   }
 
@@ -1624,7 +1879,11 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
   }
 
   if (is_compound && mbmi->mode != GLOBAL_GLOBALMV) {
-    const int ref_mv_idx = mbmi->ref_mv_idx + 1;
+#if CONFIG_NEW_INTER_MODES
+    int ref_mv_idx = mbmi->ref_mv_idx;
+#else
+    int ref_mv_idx = mbmi->ref_mv_idx + 1;
+#endif  // CONFIG_NEW_INTER_MODES
     nearestmv[0] = xd->ref_mv_stack[ref_frame][0].this_mv;
     nearestmv[1] = xd->ref_mv_stack[ref_frame][0].comp_mv;
     nearmv[0] = xd->ref_mv_stack[ref_frame][ref_mv_idx].this_mv;
@@ -1637,21 +1896,28 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
                        features->cur_frame_force_integer_mv);
     lower_mv_precision(&nearmv[1].as_mv, allow_hp,
                        features->cur_frame_force_integer_mv);
+#if CONFIG_NEW_INTER_MODES
+  } else if (mbmi->mode == NEARMV) {
+    nearmv[0] = xd->ref_mv_stack[mbmi->ref_frame[0]][mbmi->ref_mv_idx].this_mv;
+  }
+#else
   } else if (mbmi->ref_mv_idx > 0 && mbmi->mode == NEARMV) {
     nearmv[0] =
         xd->ref_mv_stack[mbmi->ref_frame[0]][1 + mbmi->ref_mv_idx].this_mv;
   }
+#endif  // CONFIG_NEW_INTER_MODES
 
   int_mv ref_mv[2] = { nearestmv[0], nearestmv[1] };
 
   if (is_compound) {
     int ref_mv_idx = mbmi->ref_mv_idx;
+#if !CONFIG_NEW_INTER_MODES
     // Special case: NEAR_NEWMV and NEW_NEARMV modes use
     // 1 + mbmi->ref_mv_idx (like NEARMV) instead of
     // mbmi->ref_mv_idx (like NEWMV)
     if (mbmi->mode == NEAR_NEWMV || mbmi->mode == NEW_NEARMV)
       ref_mv_idx = 1 + mbmi->ref_mv_idx;
-
+#endif  // !CONFIG_NEW_INTER_MODES
     // TODO(jingning, yunqing): Do we need a lower_mv_precision() call here?
     if (compound_ref0_mode(mbmi->mode) == NEWMV)
       ref_mv[0] = xd->ref_mv_stack[ref_frame][ref_mv_idx].this_mv;
@@ -1664,8 +1930,14 @@ static void read_inter_block_mode_info(AV1Decoder *const pbi,
         ref_mv[0] = xd->ref_mv_stack[ref_frame][mbmi->ref_mv_idx].this_mv;
     }
   }
-
+#if CONFIG_NEW_INTER_MODES
+  if (mbmi->skip_mode) {
+    assert(mbmi->mode == NEAR_NEARMV);
+    assert(mbmi->ref_mv_idx == 0);
+  }
+#else
   if (mbmi->skip_mode) assert(mbmi->mode == NEAREST_NEARESTMV);
+#endif  // CONFIG_NEW_INTER_MODES
 
   const int mv_corrupted_flag =
       !assign_mv(cm, xd, mbmi->mode, mbmi->ref_frame, mbmi->mv, ref_mv,
@@ -1848,6 +2120,10 @@ static void read_inter_frame_mode_info(AV1Decoder *const pbi,
     mbmi->segment_id = read_inter_segment_id(cm, xd, 0, r);
 
   read_cdef(cm, r, xd);
+
+#if CONFIG_CCSO
+  if (cm->seq_params.enable_ccso) read_ccso(cm, r, xd);
+#endif
 
   read_delta_q_params(cm, xd, r);
 

@@ -17,11 +17,11 @@ import argparse
 from CalculateQualityMetrics import CalculateQualityMetric, GatherQualityMetrics
 from Utils import GetShortContentName, CreateNewSubfolder, SetupLogging, \
      Cleanfolder, CreateClipList, GetEncLogFile, GatherPerfInfo, \
-     GetRDResultCsvFile, GatherPerframeStat, GatherInstrCycleInfo, DeleteFile
+     GetRDResultCsvFile, GatherPerframeStat, GatherInstrCycleInfo, DeleteFile, md5
 import Utils
 from Config import LogLevels, FrameNum, TEST_CONFIGURATIONS, QPs, WorkPath, \
      Path_RDResults, LoggerName, QualityList, MIN_GOP_LENGTH, UsePerfUtil, \
-     EnableTimingInfo, CodecNames
+     EnableTimingInfo, CodecNames, EnableMD5, HEVC_QPs, SUFFIX
 from EncDecUpscale import Encode, Decode
 
 ###############################################################################
@@ -33,8 +33,9 @@ def CleanIntermediateFiles():
 
 def GetBsReconFileName(EncodeMethod, CodecName, EncodePreset, test_cfg, clip, QP):
     basename = GetShortContentName(clip.file_name, False)
-    filename = "%s_%s_%s_%s_Preset_%s_QP_%d.obu" % \
-               (basename, EncodeMethod, CodecName, test_cfg, EncodePreset, QP)
+    suffix = SUFFIX[CodecName]
+    filename = "%s_%s_%s_%s_Preset_%s_QP_%d%s" % \
+               (basename, EncodeMethod, CodecName, test_cfg, EncodePreset, QP, suffix)
     bs = os.path.join(Path_Bitstreams, filename)
     filename = "%s_%s_%s_%s_Preset_%s_QP_%d_Decoded.y4m" % \
                (basename, EncodeMethod, CodecName, test_cfg, EncodePreset, QP)
@@ -64,7 +65,11 @@ def CleanUp_workfolders():
 def Run_Encode_Test(test_cfg, clip, codec, method, preset, LogCmdOnly = False):
     Utils.Logger.info("start running %s encode tests with %s"
                       % (test_cfg, clip.file_name))
-    for QP in QPs[test_cfg]:
+    QPSet = QPs[test_cfg]
+    if codec == "hevc":
+        QPSet = HEVC_QPs[test_cfg]
+
+    for QP in QPSet:
         Utils.Logger.info("start encode with QP %d" % (QP))
         #encode
         JobName = '%s_%s_%s_%s_Preset_%s_QP_%d' % \
@@ -77,7 +82,7 @@ def Run_Encode_Test(test_cfg, clip, codec, method, preset, LogCmdOnly = False):
                         Path_EncLog, LogCmdOnly)
         Utils.Logger.info("start decode file %s" % os.path.basename(bsFile))
         #decode
-        decodedYUV = Decode(method, test_cfg, codec, bsFile, Path_DecodedYuv, Path_TimingLog,
+        decodedYUV = Decode(clip, method, test_cfg, codec, bsFile, Path_DecodedYuv, Path_TimingLog,
                             False, LogCmdOnly)
         #calcualte quality distortion
         Utils.Logger.info("start quality metric calculation")
@@ -126,6 +131,8 @@ def GenerateSummaryRDDataFile(EncodeMethod, CodecName, EncodePreset,
     csv.write(",EncT[s],DecT[s]")
     if UsePerfUtil:
         csv.write(",EncInstr,DecInstr,EncCycles,DecCycles")
+    if EnableMD5:
+        csv.write(",EncMD5,DecMD5")
     csv.write('\n')
 
     perframe_csv = open(perframe_csvfile, 'wt')
@@ -137,13 +144,17 @@ def GenerateSummaryRDDataFile(EncodeMethod, CodecName, EncodePreset,
             perframe_csv.write(',' + qty)
     perframe_csv.write('\n')
 
+    QPSet = QPs[test_cfg]
+    if CodecName == "hevc":
+        QPSet = HEVC_QPs[test_cfg]
+
     for clip in clip_list:
-        for qp in QPs[test_cfg]:
+        for qp in QPSet:
             bs, dec = GetBsReconFileName(EncodeMethod, CodecName, EncodePreset,
                                          test_cfg, clip, qp)
             filesize = os.path.getsize(bs)
-            bitrate = (filesize * 8 * (clip.fps_num / clip.fps_denom)
-                       / FrameNum[test_cfg]) / 1000.0
+            bitrate = round((filesize * 8 * (clip.fps_num / clip.fps_denom)
+                       / FrameNum[test_cfg]) / 1000.0, 6)
             quality, perframe_vmaf_log = GatherQualityMetrics(dec, Path_QualityLog)
             csv.write("%s,%s,%s,%s,%s,%s,%s,%.2f,%d,%s,%d,"
                       %(test_cfg,EncodeMethod,CodecName,EncodePreset,clip.file_class,
@@ -152,18 +163,24 @@ def GenerateSummaryRDDataFile(EncodeMethod, CodecName, EncodePreset,
             if (test_cfg == "STILL"):
                 csv.write("%d"%filesize)
             else:
-                csv.write("%.4f"%bitrate)
+                csv.write("%f"%bitrate)
 
             for qty in quality:
-                csv.write(",%.4f"%qty)
+                csv.write(",%f"%qty)
             if UsePerfUtil:
                 enc_time, dec_time, enc_instr, dec_instr, enc_cycles, dec_cycles = GatherInstrCycleInfo(bs, Path_TimingLog)
-                csv.write(",%.2f,%.2f,%s,%s,%s,%s,\n" % (enc_time,dec_time,enc_instr,dec_instr,enc_cycles,dec_cycles))
+                csv.write(",%.2f,%.2f,%s,%s,%s,%s," % (enc_time,dec_time,enc_instr,dec_instr,enc_cycles,dec_cycles))
             elif EnableTimingInfo:
                 enc_time, dec_time = GatherPerfInfo(bs, Path_TimingLog)
-                csv.write(",%.2f,%.2f,\n"%(enc_time,dec_time))
+                csv.write(",%.2f,%.2f,"%(enc_time,dec_time))
             else:
-                csv.write(",,,\n")
+                csv.write(",,,")
+            if EnableMD5:
+                enc_md5 = md5(bs)
+                dec_md5 = md5(dec)
+                csv.write("%s,%s"%(enc_md5, dec_md5))
+
+            csv.write("\n")
 
             if (EncodeMethod == 'aom'):
                 enc_log = GetEncLogFile(bs, log_path)
@@ -199,9 +216,9 @@ def ParseArguments(raw_args):
                         metavar='', help="EncodePreset: 0,1,2... for aom")
     parser.add_argument('-c', "--CodecName", dest='CodecName', type=str,
                         default='av2', choices=CodecNames, metavar='',
-                        help="CodecName: av1, av2")
+                        help="CodecName: av1, av2, hevc")
     parser.add_argument('-m', "--EncodeMethod", dest='EncodeMethod', type=str,
-                        metavar='', help="EncodeMethod: aom, svt for av1")
+                        metavar='', help="EncodeMethod: aom, svt for av1, hm for hevc")
     if len(raw_args) == 1:
         parser.print_help()
         sys.exit(1)
@@ -222,6 +239,8 @@ def ParseArguments(raw_args):
 if __name__ == "__main__":
     #sys.argv = ["", "-f", "encode", "-c", "av2", "-m", "aom", "-p", "6", "--LogCmdOnly", "1"]
     #sys.argv = ["", "-f", "summary", "-c", "av2", "-m", "aom", "-p", "6"]
+    #sys.argv = ["", "-f", "encode", "-c", "hevc", "-m", "hm", "-p", "0"] #, "--LogCmdOnly", "1"]
+    #sys.argv = ["", "-f", "encode", "-c", "av1", "-m", "aom", "-p", "0"]  # , "--LogCmdOnly", "1"]
     ParseArguments(sys.argv)
 
     # preparation for executing functions

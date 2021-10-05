@@ -15,9 +15,7 @@
 #include "av1/encoder/encoder.h"
 #include "av1/encoder/encoder_alloc.h"
 #include "av1/encoder/ethread.h"
-#if !CONFIG_REALTIME_ONLY
 #include "av1/encoder/firstpass.h"
-#endif
 #include "av1/encoder/global_motion.h"
 #include "av1/encoder/global_motion_facade.h"
 #include "av1/encoder/rdopt.h"
@@ -365,7 +363,6 @@ static AOM_INLINE void switch_tile_and_get_next_job(
   }
 }
 
-#if !CONFIG_REALTIME_ONLY
 static int fp_enc_row_mt_worker_hook(void *arg1, void *unused) {
   EncWorkerData *const thread_data = (EncWorkerData *)arg1;
   AV1_COMP *const cpi = thread_data->cpi;
@@ -417,7 +414,6 @@ static int fp_enc_row_mt_worker_hook(void *arg1, void *unused) {
 
   return 1;
 }
-#endif
 
 static int enc_row_mt_worker_hook(void *arg1, void *unused) {
   EncWorkerData *const thread_data = (EncWorkerData *)arg1;
@@ -598,14 +594,6 @@ static AOM_INLINE void create_enc_workers(AV1_COMP *cpi, int num_workers) {
           cm, thread_data->td->mbmi_ext,
           aom_calloc(sb_mi_size, sizeof(*thread_data->td->mbmi_ext)));
 
-      if (cpi->sf.part_sf.partition_search_type == VAR_BASED_PARTITION) {
-        const int num_64x64_blocks =
-            (cm->seq_params.sb_size == BLOCK_64X64) ? 1 : 4;
-        CHECK_MEM_ERROR(
-            cm, thread_data->td->vt64x64,
-            aom_malloc(sizeof(*thread_data->td->vt64x64) * num_64x64_blocks));
-      }
-
       // Create threads
       if (!winterface->reset(worker))
         aom_internal_error(&cm->error, AOM_CODEC_ERROR,
@@ -653,7 +641,6 @@ void av1_create_workers(AV1_COMP *cpi, int num_workers) {
   }
 }
 
-#if !CONFIG_REALTIME_ONLY
 static AOM_INLINE void fp_create_enc_workers(AV1_COMP *cpi, int num_workers) {
   AV1_COMMON *const cm = &cpi->common;
   const AVxWorkerInterface *const winterface = aom_get_worker_interface();
@@ -698,7 +685,6 @@ static AOM_INLINE void fp_create_enc_workers(AV1_COMP *cpi, int num_workers) {
     winterface->sync(worker);
   }
 }
-#endif
 
 static AOM_INLINE void launch_enc_workers(MultiThreadInfo *const mt_info,
                                           int num_workers) {
@@ -816,7 +802,6 @@ static AOM_INLINE void prepare_enc_workers(AV1_COMP *cpi, AVxWorkerHook hook,
   }
 }
 
-#if !CONFIG_REALTIME_ONLY
 static AOM_INLINE void fp_prepare_enc_workers(AV1_COMP *cpi, AVxWorkerHook hook,
                                               int num_workers) {
   MultiThreadInfo *const mt_info = &cpi->mt_info;
@@ -839,7 +824,6 @@ static AOM_INLINE void fp_prepare_enc_workers(AV1_COMP *cpi, AVxWorkerHook hook,
     }
   }
 }
-#endif
 
 // Computes the number of workers for row multi-threading of encoding stage
 static AOM_INLINE int compute_num_enc_row_mt_workers(AV1_COMMON *const cm,
@@ -932,7 +916,6 @@ static AOM_INLINE void compute_max_sb_rows_cols(AV1_COMP *cpi, int *max_sb_rows,
   }
 }
 
-#if !CONFIG_REALTIME_ONLY
 // Computes the number of workers for firstpass stage (row/tile multi-threading)
 int av1_fp_compute_num_enc_workers(AV1_COMP *cpi) {
   AV1_COMMON *cm = &cpi->common;
@@ -972,7 +955,6 @@ static AOM_INLINE int fp_compute_max_mb_rows(
   }
   return max_mb_rows;
 }
-#endif
 
 void av1_encode_tiles_row_mt(AV1_COMP *cpi) {
   AV1_COMMON *const cm = &cpi->common;
@@ -1047,7 +1029,6 @@ void av1_encode_tiles_row_mt(AV1_COMP *cpi) {
   accumulate_counters_enc_workers(cpi, num_workers);
 }
 
-#if !CONFIG_REALTIME_ONLY
 void av1_fp_encode_tiles_row_mt(AV1_COMP *cpi) {
   AV1_COMMON *const cm = &cpi->common;
   MultiThreadInfo *const mt_info = &cpi->mt_info;
@@ -1316,7 +1297,6 @@ void av1_mc_flow_dispenser_mt(AV1_COMP *cpi) {
   launch_enc_workers(&cpi->mt_info, num_workers);
   sync_enc_workers(&cpi->mt_info, cm, num_workers);
 }
-#endif  // !CONFIG_REALTIME_ONLY
 
 // Checks if a job is available in the current direction. If a job is available,
 // frame_idx will be populated and returns 1, else returns 0.

@@ -254,6 +254,11 @@ static AOM_INLINE void palette_rd_y(
 
   const int palette_mode_cost =
       intra_mode_info_cost_y(cpi, x, mbmi, bsize, dc_mode_cost);
+
+#if CONFIG_ORIP
+  mbmi->angle_delta[PLANE_TYPE_Y] = 0;
+#endif
+
   if (model_intra_yrd_and_prune(cpi, x, bsize, palette_mode_cost,
                                 best_model_rd)) {
     return;
@@ -411,6 +416,11 @@ void av1_rd_pick_palette_intra_sby(
     uint8_t *best_blk_skip, uint8_t *tx_type_map) {
   MACROBLOCKD *const xd = &x->e_mbd;
   MB_MODE_INFO *const mbmi = xd->mi[0];
+
+#if CONFIG_MRLS
+  mbmi->mrl_index = 0;
+#endif
+
 #if CONFIG_SDP
   assert(!is_inter_block(mbmi, xd->tree_type));
 #else
@@ -420,6 +430,9 @@ void av1_rd_pick_palette_intra_sby(
                            bsize));
   assert(PALETTE_MAX_SIZE == 8);
   assert(PALETTE_MIN_SIZE == 2);
+#if CONFIG_ORIP
+  mbmi->angle_delta[PLANE_TYPE_Y] = 0;
+#endif
 
   const int src_stride = x->plane[0].src.stride;
   const uint8_t *const src = x->plane[0].src.buf;

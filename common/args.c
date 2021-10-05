@@ -80,13 +80,27 @@ int parse_cfg(const char *file, cfg_options_t *config) {
     GET_PARAMS(enable_ab_partitions);
     GET_PARAMS(enable_rect_partitions);
     GET_PARAMS(enable_1to4_partitions);
+    GET_PARAMS(disable_ml_partition_speed_features);
+    GET_PARAMS(disable_ml_transform_speed_features);
 #if CONFIG_SDP
     GET_PARAMS(enable_sdp);
+#endif
+#if CONFIG_MRLS
+    GET_PARAMS(enable_mrls);
+#endif
+#if CONFIG_ORIP
+    GET_PARAMS(enable_orip);
+#endif
+#if CONFIG_IST
+    GET_PARAMS(enable_ist);
 #endif
     GET_PARAMS(enable_flip_idtx);
     GET_PARAMS(enable_deblocking);
     GET_PARAMS(enable_cdef);
     GET_PARAMS(enable_restoration);
+#if CONFIG_CCSO
+    GET_PARAMS(enable_ccso);
+#endif
     GET_PARAMS(enable_obmc);
     GET_PARAMS(enable_warped_motion);
     GET_PARAMS(enable_global_motion);
@@ -116,6 +130,9 @@ int parse_cfg(const char *file, cfg_options_t *config) {
     GET_PARAMS(enable_ref_frame_mvs);
     GET_PARAMS(enable_reduced_reference_set);
     GET_PARAMS(reduced_tx_type_set);
+#if CONFIG_NEW_INTER_MODES
+    GET_PARAMS(max_drl_refmvs);
+#endif  // CONFIG_NEW_INTER_MODES
 
     fprintf(stderr, "\nInvalid parameter: %s", left);
     exit(-1);

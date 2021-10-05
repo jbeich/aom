@@ -234,18 +234,38 @@ typedef struct cfg_options {
    *
    */
   unsigned int enable_1to4_partitions;
+  /*!\brief disable ml-based speed-up for partition search
+   *
+   */
+  unsigned int disable_ml_partition_speed_features;
+  /*!\brief disable ml-based speed-up for transform search
+   *
+   */
+  unsigned int disable_ml_transform_speed_features;
 #if CONFIG_SDP
   /*!\brief enable Semi-decoupled partitioning
    *
    */
   unsigned int enable_sdp;
 #endif  // CONFIG_SDP
-#if CONFIG_EXT_RECUR_PARTITIONS
-  /*!\brief disable ml-based speed-up for partition search
+#if CONFIG_MRLS
+  /*!\brief enable Multiple reference line selection
    *
    */
-  unsigned int disable_ml_partition_speed_features;
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
+  unsigned int enable_mrls;
+#endif  // CONFIG_MRLS
+#if CONFIG_ORIP
+  /*!\brief enable Offset based refinement of Intra prediction
+   *
+   */
+  unsigned int enable_orip;
+#endif  // CONFIG_ORIP
+#if CONFIG_IST
+  /*!\brief enable Intra secondary transform
+   *
+   */
+  unsigned int enable_ist;
+#endif  // CONFIG_IST
   /*!\brief enable flip and identity transform type
    *
    */
@@ -262,6 +282,12 @@ typedef struct cfg_options {
    *
    */
   unsigned int enable_restoration;
+#if CONFIG_CCSO
+  /*!\brief enable cross-component sample offset
+   *
+   */
+  unsigned int enable_ccso;
+#endif
   /*!\brief enable OBMC
    *
    */
@@ -366,6 +392,12 @@ typedef struct cfg_options {
    *
    */
   unsigned int reduced_tx_type_set;
+#if CONFIG_NEW_INTER_MODES
+  /*!\brief Max number of reference mvs in dynamic reference list
+   *
+   */
+  unsigned int max_drl_refmvs;
+#endif  // CONFIG_NEW_INTER_MODES
 } cfg_options_t;
 
 /*!\brief Encoded Frame Flags
@@ -643,7 +675,7 @@ typedef struct aom_codec_enc_cfg {
    * values to use. To determine the range programmatically, call
    * aom_codec_enc_config_default() with a usage value of 0.
    */
-  unsigned int rc_min_quantizer;
+  int rc_min_quantizer;
 
   /*!\brief Maximum (Worst Quality) Quantizer
    *
@@ -653,7 +685,7 @@ typedef struct aom_codec_enc_cfg {
    * values to use. To determine the range programmatically, call
    * aom_codec_enc_config_default() with a usage value of 0.
    */
-  unsigned int rc_max_quantizer;
+  int rc_max_quantizer;
 
   /*
    * bitrate tolerance
@@ -873,11 +905,11 @@ typedef struct aom_codec_enc_cfg {
    */
   unsigned int use_fixed_qp_offsets;
 
-/*!\brief Number of fixed QP offsets
+/*!\brief Max number of fixed QP offsets
  *
  * This defines the number of elements in the fixed_qp_offsets array.
  */
-#define FIXED_QP_OFFSET_COUNT 5
+#define FIXED_QP_OFFSET_COUNT 6
 
   /*!\brief Array of fixed QP offsets
    *
@@ -946,8 +978,7 @@ aom_codec_err_t aom_codec_enc_init_ver(aom_codec_ctx_t *ctx,
  * \param[in]    iface     Pointer to the algorithm interface to use.
  * \param[out]   cfg       Configuration buffer to populate.
  * \param[in]    usage     Algorithm specific usage value. For AV1, must be
- *                         set to AOM_USAGE_GOOD_QUALITY (0) or
- *                         AOM_USAGE_REALTIME (1).
+ *                         set to AOM_USAGE_GOOD_QUALITY (0).
  *
  * \retval #AOM_CODEC_OK
  *     The configuration was populated.
@@ -1004,8 +1035,6 @@ aom_fixed_buf_t *aom_codec_get_global_headers(aom_codec_ctx_t *ctx);
 
 /*!\brief usage parameter analogous to AV1 GOOD QUALITY mode. */
 #define AOM_USAGE_GOOD_QUALITY (0)
-/*!\brief usage parameter analogous to AV1 REALTIME mode. */
-#define AOM_USAGE_REALTIME (1)
 
 /*!\brief Encode a frame
  *

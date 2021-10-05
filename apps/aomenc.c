@@ -31,6 +31,7 @@
 #include "aom_dsp/aom_dsp_common.h"
 #include "aom_ports/aom_timer.h"
 #include "aom_ports/mem_ops.h"
+#include "av1/common/quant_common.h"
 #include "common/args.h"
 #include "common/ivfenc.h"
 #include "common/rawenc.h"
@@ -240,7 +241,6 @@ const arg_def_t *main_args[] = { &g_av1_codec_arg_defs.help,
                                  &g_av1_codec_arg_defs.skip,
                                  &g_av1_codec_arg_defs.step,
                                  &g_av1_codec_arg_defs.good_dl,
-                                 &g_av1_codec_arg_defs.rt_dl,
                                  &g_av1_codec_arg_defs.quietarg,
                                  &g_av1_codec_arg_defs.verbosearg,
                                  &g_av1_codec_arg_defs.psnrarg,
@@ -430,12 +430,26 @@ const arg_def_t *av1_ctrl_args[] = {
 };
 
 const arg_def_t *av1_key_val_args[] = {
+  &g_av1_codec_arg_defs.disable_ml_transform_speed_features,
+  &g_av1_codec_arg_defs.disable_ml_partition_speed_features,
 #if CONFIG_SDP
   &g_av1_codec_arg_defs.enable_sdp,
 #endif
-#if CONFIG_EXT_RECUR_PARTITIONS
-  &g_av1_codec_arg_defs.disable_ml_partition_speed_features,
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
+#if CONFIG_MRLS
+  &g_av1_codec_arg_defs.enable_mrls,
+#endif
+#if CONFIG_ORIP
+  &g_av1_codec_arg_defs.enable_orip,
+#endif
+#if CONFIG_IST
+  &g_av1_codec_arg_defs.enable_ist,
+#endif
+#if CONFIG_NEW_INTER_MODES
+  &g_av1_codec_arg_defs.max_drl_refmvs,
+#endif  // CONFIG_NEW_INTER_MODES
+#if CONFIG_CCSO
+  &g_av1_codec_arg_defs.enable_ccso,
+#endif
   NULL,
 };
 
@@ -530,7 +544,7 @@ struct stream_state {
   uint64_t psnr_samples_total;
   double psnr_totals[4];
   int psnr_count;
-  int counts[256];
+  int counts[QINDEX_RANGE];
   aom_codec_ctx_t encoder;
   unsigned int frames_out;
   uint64_t cx_time;
@@ -566,16 +580,31 @@ static void init_config(cfg_options_t *config) {
   config->enable_ab_partitions = 1;
   config->enable_rect_partitions = 1;
   config->enable_1to4_partitions = 1;
+  config->disable_ml_transform_speed_features = 0;
+#if CONFIG_EXT_RECUR_PARTITIONS
+  config->disable_ml_partition_speed_features = 1;
+#else
+  config->disable_ml_partition_speed_features = 0;
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
 #if CONFIG_SDP
   config->enable_sdp = 1;
 #endif
-#if CONFIG_EXT_RECUR_PARTITIONS
-  config->disable_ml_partition_speed_features = 1;
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
+#if CONFIG_MRLS
+  config->enable_mrls = 1;
+#endif
+#if CONFIG_ORIP
+  config->enable_orip = 1;
+#endif
+#if CONFIG_IST
+  config->enable_ist = 1;
+#endif
   config->enable_flip_idtx = 1;
   config->enable_deblocking = 1;
   config->enable_cdef = 1;
   config->enable_restoration = 1;
+#if CONFIG_CCSO
+  config->enable_ccso = 1;
+#endif
   config->enable_obmc = 1;
   config->enable_warped_motion = 1;
   config->enable_global_motion = 1;
@@ -661,8 +690,6 @@ static void parse_global_config(struct AvxEncoderConfig *global, char ***argv) {
       global->usage = arg_parse_uint(&arg);
     } else if (arg_match(&arg, &g_av1_codec_arg_defs.good_dl, argi)) {
       global->usage = AOM_USAGE_GOOD_QUALITY;  // Good quality usage
-    } else if (arg_match(&arg, &g_av1_codec_arg_defs.rt_dl, argi)) {
-      global->usage = AOM_USAGE_REALTIME;  // Real-time usage
     } else if (arg_match(&arg, &g_av1_codec_arg_defs.use_yv12, argi)) {
       global->color_type = YV12;
     } else if (arg_match(&arg, &g_av1_codec_arg_defs.use_i420, argi)) {
@@ -1053,7 +1080,6 @@ static int parse_stream_params(struct AvxEncoderConfig *global,
       config->cfg.full_still_picture_hdr = 1;
     } else if (arg_match(&arg, &g_av1_codec_arg_defs.use_16bit_internal,
                          argi)) {
-      config->use_16bit_internal = 1;
       warn("%s option deprecated. default to 1 always.\n", arg.name);
     } else if (arg_match(&arg, &g_av1_codec_arg_defs.dropframe_thresh, argi)) {
       config->cfg.rc_dropframe_thresh = arg_parse_uint(&arg);
@@ -1083,17 +1109,17 @@ static int parse_stream_params(struct AvxEncoderConfig *global,
     } else if (arg_match(&arg, &g_av1_codec_arg_defs.target_bitrate, argi)) {
       config->cfg.rc_target_bitrate = arg_parse_uint(&arg);
     } else if (arg_match(&arg, &g_av1_codec_arg_defs.min_qp_level, argi)) {
-      config->cfg.rc_min_quantizer = arg_parse_uint(&arg);
+      config->cfg.rc_min_quantizer = arg_parse_int(&arg);
     } else if (arg_match(&arg, &g_av1_codec_arg_defs.max_qp_level, argi)) {
-      config->cfg.rc_max_quantizer = arg_parse_uint(&arg);
+      config->cfg.rc_max_quantizer = arg_parse_int(&arg);
     } else if (arg_match(&arg, &g_av1_codec_arg_defs.min_q_level, argi)) {
       const unsigned int min_q_val = arg_parse_uint(&arg);
       config->cfg.rc_min_quantizer =
-          get_qindex_from_quantizer_and_warn(min_q_val, "min-q", "min-qp");
+          (int)get_qindex_from_quantizer_and_warn(min_q_val, "min-q", "min-qp");
     } else if (arg_match(&arg, &g_av1_codec_arg_defs.max_q_level, argi)) {
       const unsigned int max_q_val = arg_parse_uint(&arg);
       config->cfg.rc_max_quantizer =
-          get_qindex_from_quantizer_and_warn(max_q_val, "max-q", "max-qp");
+          (int)get_qindex_from_quantizer_and_warn(max_q_val, "max-q", "max-qp");
     } else if (arg_match(&arg, &g_av1_codec_arg_defs.undershoot_pct, argi)) {
       config->cfg.rc_undershoot_pct = arg_parse_uint(&arg);
     } else if (arg_match(&arg, &g_av1_codec_arg_defs.overshoot_pct, argi)) {
@@ -1145,17 +1171,16 @@ static int parse_stream_params(struct AvxEncoderConfig *global,
       const int fixed_qp_offset_count = arg_parse_list(
           &arg, config->cfg.fixed_qp_offsets, FIXED_QP_OFFSET_COUNT);
       if (fixed_qp_offset_count < FIXED_QP_OFFSET_COUNT) {
-        die("Option --fixed_qp_offsets requires %d comma-separated values, but "
-            "only %d values were provided.\n",
-            FIXED_QP_OFFSET_COUNT, fixed_qp_offset_count);
+        if (fixed_qp_offset_count < 2) {
+          die("Option --fixed_qp_offsets requires at least 2 comma-separated "
+              "values for kf and arf, but only %d were provided.\n",
+              fixed_qp_offset_count);
+        }
+        for (int k = fixed_qp_offset_count; k < FIXED_QP_OFFSET_COUNT; ++k)
+          config->cfg.fixed_qp_offsets[k] =
+              (config->cfg.fixed_qp_offsets[k - 1] + 1) / 2;
       }
       config->cfg.use_fixed_qp_offsets = 1;
-    } else if (global->usage == AOM_USAGE_REALTIME &&
-               arg_match(&arg, &g_av1_codec_arg_defs.enable_restoration,
-                         argi)) {
-      if (arg_parse_uint(&arg) == 1) {
-        warn("non-zero %s option ignored in realtime mode.\n", arg.name);
-      }
     } else if (arg_match(&arg, &g_av1_codec_arg_defs.cq_level, argi)) {
       const unsigned int cq_level_val = arg_parse_uint(&arg);
       const int qp_val =
@@ -1190,12 +1215,8 @@ static int parse_stream_params(struct AvxEncoderConfig *global,
       if (!match) argj++;
     }
   }
-  config->use_16bit_internal |= config->cfg.g_bit_depth > AOM_BITS_8;
+  config->use_16bit_internal = 1;
 
-  if (global->usage == AOM_USAGE_REALTIME && config->cfg.g_lag_in_frames != 0) {
-    warn("non-zero lag-in-frames option ignored in realtime mode.\n");
-    config->cfg.g_lag_in_frames = 0;
-  }
   return eos_mark_found;
 }
 
@@ -1357,19 +1378,24 @@ static void show_stream_config(struct stream_state *stream,
           encoder_cfg->enable_reduced_reference_set);
   fprintf(stdout, "Reduced transform set          : %d\n",
           encoder_cfg->reduced_tx_type_set);
+#if CONFIG_NEW_INTER_MODES
+  fprintf(stdout, "Tool setting (Ref MVs)         : max-drl-refmvs (%d)\n",
+          encoder_cfg->max_drl_refmvs);
+#endif  // CONFIG_NEW_INTER_MODES
 
   fprintf(
       stdout, "Tool setting (Partition)       : T-Type (%d), 4:1/1:4 (%d)\n",
       encoder_cfg->enable_ab_partitions, encoder_cfg->enable_1to4_partitions);
+  fprintf(stdout, "Disable ml transform speed features          : %d\n",
+          encoder_cfg->disable_ml_transform_speed_features);
 #if CONFIG_SDP
   fprintf(stdout, "                               : SDP (%d)\n",
           encoder_cfg->enable_sdp);
 #endif
-#if CONFIG_EXT_RECUR_PARTITIONS
-  fprintf(stdout, "Disable ML Tools for Partition : (%d)\n",
-          encoder_cfg->disable_ml_partition_speed_features);
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
-
+#if CONFIG_IST
+  fprintf(stdout, "                               : IST (%d)\n",
+          encoder_cfg->enable_ist);
+#endif
   fprintf(stdout,
           "Tool setting (Intra)           : SmoothIntra (%d), CfL (%d), "
           "FilterIntra (%d)\n",
@@ -1384,12 +1410,33 @@ static void show_stream_config(struct stream_state *stream,
           "(%d)\n",
           encoder_cfg->enable_dual_filter, encoder_cfg->enable_angle_delta);
 #endif  // CONFIG_REMOVE_DUAL_FILTER
+
   fprintf(stdout,
           "                               : "
-          "EdgeFilter (%d), PaethPredictor (%d)\n",
+          "EdgeFilter (%d), PaethPredictor (%d)"
+#if CONFIG_MRLS
+          ", MRLS(%d)"
+#endif
+#if CONFIG_ORIP
+          ", ORIP(%d)"
+#endif
+          "\n",
           encoder_cfg->enable_intra_edge_filter,
-          encoder_cfg->enable_paeth_intra);
 
+#if CONFIG_MRLS
+#if CONFIG_ORIP
+          encoder_cfg->enable_paeth_intra, encoder_cfg->enable_mrls,
+          encoder_cfg->enable_orip);
+#else
+          encoder_cfg->enable_paeth_intra, encoder_cfg->enable_mrls);
+#endif
+#else
+#if CONFIG_ORIP
+          encoder_cfg->enable_paeth_intra, encoder_cfg->enable_orip);
+#else
+          encoder_cfg->enable_paeth_intra);
+#endif
+#endif
   fprintf(stdout,
           "Tool setting (Inter)           : OBMC (%d), WarpMotion (%d), "
           "GlobalMotion (%d)\n",
@@ -1429,8 +1476,14 @@ static void show_stream_config(struct stream_state *stream,
 
   fprintf(stdout,
           "Tool setting (Loop filter)     : Deblocking (%d), CDEF (%d), "
+#if CONFIG_CCSO
+          "CCSO (%d), "
+#endif
           "LoopRestortion (%d)\n",
           encoder_cfg->enable_deblocking, encoder_cfg->enable_cdef,
+#if CONFIG_CCSO
+          encoder_cfg->enable_ccso,
+#endif
           encoder_cfg->enable_restoration);
 
   fprintf(stdout,
@@ -2063,9 +2116,8 @@ int main(int argc, const char **argv_) {
           default: break;
         }
       }
-      if (stream->config.cfg.g_bit_depth > 8) {
-        stream->config.use_16bit_internal = 1;
-      }
+      // Force encoder to use 16-bit pipeline for 8-bit video/image
+      stream->config.use_16bit_internal = 1;
       if (profile_updated && !global.quiet) {
         fprintf(stderr,
                 "Warning: automatically updating to profile %d to "
@@ -2277,8 +2329,8 @@ int main(int argc, const char **argv_) {
                   "----------------------------\n");
 
           fprintf(stdout,
-                  "Summary:    %10.4f  |  %2.4f  |  %2.4f  |  %2.4f"
-                  "  |  %2.4f    |  %2.4f        |  %6.1fs (%3.1f fps)\n",
+                  "Summary:    %10.6f  |  %2.6f  |  %2.6f  |  %2.6f"
+                  "  |  %2.6f    |  %2.6f        |  %6.1fs (%3.1f fps)\n",
                   kbps, psnr[1], psnr[2], psnr[3], psnr[0], ovpsnr,
                   stream->cx_time / 1000000.0,
                   usec_to_fps(stream->cx_time, seen_frames));
@@ -2288,7 +2340,7 @@ int main(int argc, const char **argv_) {
                   "-----------------------------------------"
                   "---------------------------------------"
                   "----------------------------\n");
-          fprintf(stdout, "Summary:    %10.4f  |  %6.1fs (%3.1f fps)\n", kbps,
+          fprintf(stdout, "Summary:    %10.6f  |  %6.1fs (%3.1f fps)\n", kbps,
                   stream->cx_time / 1000000.0,
                   usec_to_fps(stream->cx_time, seen_frames));
         }

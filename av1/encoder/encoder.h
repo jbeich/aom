@@ -92,10 +92,7 @@ enum {
 enum {
   // Good Quality Fast Encoding. The encoder balances quality with the amount of
   // time it takes to encode the output. Speed setting controls how fast.
-  GOOD,
-  // Realtime Fast Encoding. Will force some restrictions on bitrate
-  // constraints.
-  REALTIME
+  GOOD
 } UENUM1BYTE(MODE);
 
 enum {
@@ -204,6 +201,11 @@ typedef struct {
  */
 typedef struct {
   /*!
+   * Flag to indicate if ml-based speed-up for partition search should be
+   * disabled.
+   */
+  bool disable_ml_partition_speed_features;
+  /*!
    * Flag to indicate if rectanguar partitions should be enabled.
    */
   bool enable_rect_partitions;
@@ -221,13 +223,6 @@ typedef struct {
    */
   bool enable_sdp;
 #endif
-#if CONFIG_EXT_RECUR_PARTITIONS
-  /*!
-   * Flag to indicate if ml-based speed-up for partition search should be
-   * disabled.
-   */
-  bool disable_ml_partition_speed_features;
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
   /*!
    * Indicates the minimum partition size that should be allowed. Both width and
    * height of a partition cannot be smaller than the min_partition_size.
@@ -270,12 +265,29 @@ typedef struct {
    * enabled.
    */
   bool enable_angle_delta;
+#if CONFIG_MRLS
+  /*!
+   * Flag to indicate if multiple reference line selection for intra prediction
+   * should be enabled.
+   */
+  bool enable_mrls;
+#endif
+#if CONFIG_ORIP
+  /*!
+   * Flag to indicate if ORIP should be enabled
+   */
+  bool enable_orip;
+#endif
 } IntraModeCfg;
 
 /*!
  * \brief Encoder flags for transform sizes and types.
  */
 typedef struct {
+  /*!
+   * Flag to disable ml based transform speed features.
+   */
+  bool disable_ml_transform_speed_features;
   /*!
    * Flag to indicate if 64-pt transform should be enabled.
    */
@@ -304,6 +316,12 @@ typedef struct {
    * (mode-dependent) only.
    */
   bool use_intra_default_tx_only;
+#if CONFIG_IST
+  /*!
+   * Flag to indicate if intra secondary transform should be enabled.
+   */
+  bool enable_ist;
+#endif
 } TxfmSizeTypeCfg;
 
 /*!
@@ -508,7 +526,7 @@ typedef struct {
    */
   int best_allowed_q;
   /*!
-   * Indicates the Constant/Constrained Quality level.
+   * Indicates the Constant/Constrained Quality level in [0, 255] range.
    */
   int qp;
   /*!
@@ -686,10 +704,22 @@ typedef struct {
   // List of QP offsets for: keyframe, ALTREF, and 3 levels of internal ARFs.
   // If any of these values are negative, fixed offsets are disabled.
   double fixed_qp_offsets[FIXED_QP_OFFSET_COUNT];
-  // If true, encoder will use fixed QP offsets, that are either:
+  // If the value is 0 (default), encoder may not use fixed QP offsets.
+  // If the value is 1, encoder will use fixed QP offsets, that are
+  // either:
   // - Given by the user, and stored in 'fixed_qp_offsets' array, OR
-  // - Picked automatically from qp.
+  // - Picked automatically from qp using a fixed factor.
+  // If the value is 2, encoder will use fixed QP offsets that are :
+  // - Derived from qp and has variable factors across Temporal levels as a fn.
+  // of q-step.
+  // TODO(krapaka): extend the derivation of factors also based on operating
+  // configuration such as random access and low-delay.
   int use_fixed_qp_offsets;
+#if CONFIG_QBASED_QP_OFFSET
+  // It true, the offset factor depends on the QP value
+  // else fixed value is used.
+  int q_based_qp_offsets;
+#endif  // CONFIG_QBASED_QP_OFFSET
   // Indicates the minimum flatness of the quantization matrix.
   int qm_minlevel;
   // Indicates the maximum flatness of the quantization matrix.
@@ -769,6 +799,10 @@ typedef struct {
   bool enable_cdef;
   // Indicates if loop restoration filter should be enabled.
   bool enable_restoration;
+#if CONFIG_CCSO
+  // Indicates if ccso should be enabled.
+  bool enable_ccso;
+#endif
   // When enabled, video mode should be used even for single frame input.
   bool force_video_mode;
   // Indicates if the error resiliency features should be enabled.
@@ -796,6 +830,9 @@ typedef struct {
   bool enable_global_motion;
   // Indicates if palette should be enabled.
   bool enable_palette;
+#if CONFIG_NEW_INTER_MODES
+  unsigned int max_drl_refmvs;
+#endif  // CONFIG_NEW_INTER_MODES
 } ToolCfg;
 
 #define MAX_SUBGOP_CONFIGS 64
@@ -877,6 +914,15 @@ typedef struct {
   int layer_depth[MAX_STATIC_GF_GROUP_LENGTH];
   int arf_boost[MAX_STATIC_GF_GROUP_LENGTH];
   int max_layer_depth;
+  // Maximum layer depth that is allowed.
+  // Two cases:
+  // - If positive, out-of-order coding is allowed, and this value impacts both
+  //   the coding order and quality assignment of frames.
+  // - If zero (special case), all frames are coded in-order, and this value
+  //   does NOT impact quality assignment of frames. Instead, quality
+  //   assignment depends on other values like gf_cfg->gf_max_pyr_height,
+  //   gf_cfg->gf_min_pyr_height, subgop config etc, and the qualities may still
+  //   emulate 'layers'.
   int max_layer_depth_allowed;
   // Flag to indicate if the frame of type OVERLAY_UPDATE in the current GF
   // interval shows existing alt-ref frame
@@ -1026,7 +1072,7 @@ typedef struct AV1EncoderConfig {
   enum aom_enc_pass pass;
   /*!\cond */
 
-  // Indicates if the encoding is GOOD or REALTIME.
+  // Indicates encoding mode. Currently, only GOOD mode is supported.
   MODE mode;
 
   // Indicates if row-based multi-threading should be enabled or not.
@@ -1134,10 +1180,16 @@ typedef struct FRAME_COUNTS {
                                [SIG_COEF_CONTEXTS][NUM_BASE_LEVELS + 2];
   unsigned int coeff_base_eob_multi[TOKEN_CDF_Q_CTXS][TX_SIZES][PLANE_TYPES]
                                    [SIG_COEF_CONTEXTS_EOB][NUM_BASE_LEVELS + 1];
+#if CONFIG_NEW_INTER_MODES
+  unsigned int inter_single_mode[INTER_SINGLE_MODE_CONTEXTS]
+                                [INTER_SINGLE_MODES];
+  unsigned int drl_mode[3][DRL_MODE_CONTEXTS][2];
+#else
   unsigned int newmv_mode[NEWMV_MODE_CONTEXTS][2];
   unsigned int zeromv_mode[GLOBALMV_MODE_CONTEXTS][2];
   unsigned int refmv_mode[REFMV_MODE_CONTEXTS][2];
   unsigned int drl_mode[DRL_MODE_CONTEXTS][2];
+#endif  // CONFIG_NEW_INTER_MODES
   unsigned int inter_compound_mode[INTER_COMPOUND_MODE_CONTEXTS]
                                   [INTER_COMPOUND_MODES];
   unsigned int wedge_idx[BLOCK_SIZES_ALL][16];
@@ -1156,8 +1208,17 @@ typedef struct FRAME_COUNTS {
   unsigned int comp_bwdref[REF_CONTEXTS][BWD_REFS - 1][2];
   unsigned int intrabc[2];
 
+#if CONFIG_NEW_TX_PARTITION
+  unsigned int intra_4way_txfm_partition[2][TX_SIZE_CONTEXTS][4];
+  unsigned int intra_2way_txfm_partition[2];
+  unsigned int intra_2way_rect_txfm_partition[2];
+  unsigned int inter_4way_txfm_partition[2][TXFM_PARTITION_INTER_CONTEXTS][4];
+  unsigned int inter_2way_txfm_partition[2];
+  unsigned int inter_2way_rect_txfm_partition[2];
+#else   // CONFIG_NEW_TX_PARTITION
   unsigned int txfm_partition[TXFM_PARTITION_CONTEXTS][2];
   unsigned int intra_tx_size[MAX_TX_CATS][TX_SIZE_CONTEXTS][MAX_TX_DEPTH + 1];
+#endif  // CONFIG_NEW_TX_PARTITION
   unsigned int skip_mode[SKIP_MODE_CONTEXTS][2];
   unsigned int skip_txfm[SKIP_CONTEXTS][2];
   unsigned int compound_index[COMP_INDEX_CONTEXTS][2];
@@ -3164,8 +3225,7 @@ static const MV_REFERENCE_FRAME
       ALTREF2_FRAME, LAST2_FRAME,  LAST3_FRAME,
     };
 
-static INLINE int get_ref_frame_flags(const SPEED_FEATURES *const sf,
-                                      const YV12_BUFFER_CONFIG **ref_frames,
+static INLINE int get_ref_frame_flags(const YV12_BUFFER_CONFIG **ref_frames,
                                       const int ext_ref_frame_flags) {
   // cpi->ext_flags.ref_frame_flags allows certain reference types to be
   // disabled by the external interface.  These are set by
@@ -3176,13 +3236,8 @@ static INLINE int get_ref_frame_flags(const SPEED_FEATURES *const sf,
   for (int i = 1; i < INTER_REFS_PER_FRAME; ++i) {
     const YV12_BUFFER_CONFIG *const this_ref = ref_frames[i];
     // If this_ref has appeared before, mark the corresponding ref frame as
-    // invalid. For nonrd mode, only disable GOLDEN_FRAME if it's the same
-    // as LAST_FRAME or ALTREF_FRAME (if ALTREF is being used in nonrd).
-    int index = (sf->rt_sf.use_nonrd_pick_mode &&
-                 ref_frame_priority_order[i] == GOLDEN_FRAME)
-                    ? (1 + sf->rt_sf.use_nonrd_altref_frame)
-                    : i;
-    for (int j = 0; j < index; ++j) {
+    // invalid.
+    for (int j = 0; j < i; ++j) {
       if (this_ref == ref_frames[j]) {
         flags &= ~(1 << (ref_frame_priority_order[i] - 1));
         break;

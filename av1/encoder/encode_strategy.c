@@ -39,7 +39,7 @@
 #include "av1/encoder/tune_vmaf.h"
 #endif
 
-#define TEMPORAL_FILTER_KEY_FRAME (CONFIG_REALTIME_ONLY ? 0 : 1)
+#define TEMPORAL_FILTER_KEY_FRAME 1
 
 static INLINE void set_refresh_frame_flags(
     RefreshFrameFlagsInfo *const refresh_frame_flags, bool refresh_gf,
@@ -371,10 +371,12 @@ static void get_gop_cfg_enabled_refs(AV1_COMP *const cpi, int *ref_frame_flags,
                             (best_frame < 0) ? 0 : 1, level, best_disp_order,
                             (int)step_gop_cfg->num_references);
     if (best_frame == -1) {
-      fprintf(stderr,
-              "Warning [Subgop cfg]: "
-              "Level %d ref for frame %d not found\n",
-              level, step_gop_cfg->disp_frame_idx);
+      if (cpi->print_per_frame_stats) {
+        fprintf(stderr,
+                "Warning [Subgop cfg]: "
+                "Level %d ref for frame %d not found\n",
+                level, step_gop_cfg->disp_frame_idx);
+      }
     } else {
       ref_frame_used[best_frame] = 1;
       disp_orders[abs_level][best_frame_index] = -1;
@@ -709,7 +711,8 @@ static int get_refresh_idx(int update_arf, int refresh_level,
     if (ref_pair.disp_order == -1) continue;
     const int frame_order = ref_pair.disp_order;
     const int reference_frame_level = ref_pair.pyr_level;
-    if (frame_order > cur_frame_disp) continue;
+    // Keep future frames and three closest previous frames in output order
+    if (frame_order > cur_frame_disp - 3) continue;
 
     // Keep track of the oldest reference frame matching the specified
     // refresh level from the subgop cfg
@@ -872,7 +875,6 @@ int av1_get_refresh_frame_flags(
   return 1 << refresh_idx;
 }
 
-#if !CONFIG_REALTIME_ONLY
 void setup_mi(AV1_COMP *const cpi, YV12_BUFFER_CONFIG *src) {
   AV1_COMMON *const cm = &cpi->common;
   const int num_planes = av1_num_planes(cm);
@@ -1020,7 +1022,6 @@ static int denoise_and_encode(AV1_COMP *const cpi, uint8_t *const dest,
 
   return AOM_CODEC_OK;
 }
-#endif  // !CONFIG_REALTIME_ONLY
 
 /*!\cond */
 // Struct to keep track of relevant reference frame data
@@ -1182,20 +1183,6 @@ void av1_get_ref_frames(AV1_COMP *const cpi, int cur_frame_disp,
   set_unmapped_ref(buffer_map, n_bufs, n_min_level_refs, min_level,
                    cur_frame_disp);
 
-  // Map LAST3_FRAME
-  if (n_bufs >= ALTREF_FRAME) {
-    const int use_low_level_last3 =
-        n_past_high_level < 4 && n_bufs > ALTREF_FRAME;
-    for (int i = 0; i < n_bufs; i++) {
-      if (buffer_map[i].used) continue;
-      if ((buffer_map[i].pyr_level != min_level ||
-           (use_low_level_last3 && buffer_map[i].pyr_level == min_level))) {
-        add_ref_to_slot(&buffer_map[i], remapped_ref_idx, LAST3_FRAME);
-        break;
-      }
-    }
-  }
-
   // Place past frames in LAST_FRAME, LAST2_FRAME, and LAST3_FRAME
   for (int frame = LAST_FRAME; frame < GOLDEN_FRAME; frame++) {
     // Continue if the current ref slot is already full
@@ -1282,7 +1269,6 @@ int av1_encode_strategy(AV1_COMP *const cpi, size_t *const size,
   AV1_COMMON *const cm = &cpi->common;
   GF_GROUP *gf_group = &cpi->gf_group;
   ExternalFlags *const ext_flags = &cpi->ext_flags;
-  GFConfig *const gf_cfg = &oxcf->gf_cfg;
 
   EncodeFrameInput frame_input;
   EncodeFrameParams frame_params;
@@ -1302,21 +1288,11 @@ int av1_encode_strategy(AV1_COMP *const cpi, size_t *const size,
   }
 
   if (!av1_lookahead_peek(cpi->lookahead, 0, cpi->compressor_stage)) {
-#if !CONFIG_REALTIME_ONLY
     if (flush && oxcf->pass == 1 && !cpi->twopass.first_pass_done) {
       av1_end_first_pass(cpi); /* get last stats packet */
       cpi->twopass.first_pass_done = 1;
     }
-#endif
     return -1;
-  }
-
-  // TODO(sarahparker) finish bit allocation for one pass pyramid
-  if (has_no_stats_stage(cpi)) {
-    gf_cfg->gf_max_pyr_height =
-        AOMMIN(gf_cfg->gf_max_pyr_height, USE_ALTREF_FOR_ONE_PASS);
-    gf_cfg->gf_min_pyr_height =
-        AOMMIN(gf_cfg->gf_min_pyr_height, gf_cfg->gf_max_pyr_height);
   }
 
   if (!is_stat_generation_stage(cpi)) {
@@ -1346,14 +1322,9 @@ int av1_encode_strategy(AV1_COMP *const cpi, size_t *const size,
     frame_params.show_existing_frame = 0;
   }
 
-#if !CONFIG_REALTIME_ONLY
-  const int use_one_pass_rt_params = has_no_stats_stage(cpi) &&
-                                     oxcf->mode == REALTIME &&
-                                     gf_cfg->lag_in_frames == 0;
-  if (!use_one_pass_rt_params && !is_stat_generation_stage(cpi)) {
+  if (!is_stat_generation_stage(cpi)) {
     av1_get_second_pass_params(cpi, &frame_params);
   }
-#endif
 
   struct lookahead_entry *source = NULL;
   struct lookahead_entry *last_source = NULL;
@@ -1365,12 +1336,10 @@ int av1_encode_strategy(AV1_COMP *const cpi, size_t *const size,
   }
 
   if (source == NULL) {  // If no source was found, we can't encode a frame.
-#if !CONFIG_REALTIME_ONLY
     if (flush && oxcf->pass == 1 && !cpi->twopass.first_pass_done) {
       av1_end_first_pass(cpi); /* get last stats packet */
       cpi->twopass.first_pass_done = 1;
     }
-#endif
     return -1;
   }
   // Source may be changed if temporal filtered later.
@@ -1410,13 +1379,6 @@ int av1_encode_strategy(AV1_COMP *const cpi, size_t *const size,
     cm->frame_presentation_time = (uint32_t)pts64;
   }
 
-#if CONFIG_REALTIME_ONLY
-  av1_get_one_pass_rt_params(cpi, &frame_params, *frame_flags);
-#else
-  if (use_one_pass_rt_params) {
-    av1_get_one_pass_rt_params(cpi, &frame_params, *frame_flags);
-  }
-#endif
   FRAME_UPDATE_TYPE frame_update_type = get_frame_update_type(gf_group);
 
   if (frame_params.show_existing_frame &&
@@ -1504,8 +1466,8 @@ int av1_encode_strategy(AV1_COMP *const cpi, size_t *const size,
       // in function get_ref_frame_flags. Therefore setting it manually.
       frame_params.ref_frame_flags = av1_ref_frame_flag_list[ALTREF_FRAME];
     } else {
-      frame_params.ref_frame_flags = get_ref_frame_flags(
-          &cpi->sf, ref_frame_buf, ext_flags->ref_frame_flags);
+      frame_params.ref_frame_flags =
+          get_ref_frame_flags(ref_frame_buf, ext_flags->ref_frame_flags);
     }
 
     frame_params.primary_ref_frame =
@@ -1555,23 +1517,10 @@ int av1_encode_strategy(AV1_COMP *const cpi, size_t *const size,
   if (!frame_params.show_existing_frame) {
     cm->quant_params.using_qmatrix = oxcf->q_cfg.using_qm;
   }
-#if CONFIG_REALTIME_ONLY
-  if (av1_encode(cpi, dest, &frame_input, &frame_params, &frame_results) !=
-      AOM_CODEC_OK) {
+  if (denoise_and_encode(cpi, dest, &frame_input, &frame_params,
+                         &frame_results) != AOM_CODEC_OK) {
     return AOM_CODEC_ERROR;
   }
-#else
-  if (has_no_stats_stage(cpi) && oxcf->mode == REALTIME &&
-      gf_cfg->lag_in_frames == 0) {
-    if (av1_encode(cpi, dest, &frame_input, &frame_params, &frame_results) !=
-        AOM_CODEC_OK) {
-      return AOM_CODEC_ERROR;
-    }
-  } else if (denoise_and_encode(cpi, dest, &frame_input, &frame_params,
-                                &frame_results) != AOM_CODEC_OK) {
-    return AOM_CODEC_ERROR;
-  }
-#endif  // CONFIG_REALTIME_ONLY
 
   if (!is_stat_generation_stage(cpi)) {
     // First pass doesn't modify reference buffer assignment or produce frame
@@ -1579,7 +1528,6 @@ int av1_encode_strategy(AV1_COMP *const cpi, size_t *const size,
     update_frame_flags(&cpi->common, &cpi->refresh_frame, frame_flags);
   }
 
-#if !CONFIG_REALTIME_ONLY
   if (!is_stat_generation_stage(cpi)) {
 #if TXCOEFF_COST_TIMER
     cm->cum_txcoeff_cost_timer += cm->txcoeff_cost_timer;
@@ -1591,7 +1539,6 @@ int av1_encode_strategy(AV1_COMP *const cpi, size_t *const size,
 #endif
     if (!has_no_stats_stage(cpi)) av1_twopass_postencode_update(cpi);
   }
-#endif  // !CONFIG_REALTIME_ONLY
 
 #if CONFIG_TUNE_VMAF
   if (!is_stat_generation_stage(cpi) &&

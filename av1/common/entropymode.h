@@ -26,9 +26,13 @@ extern "C" {
 
 #define TX_SIZE_CONTEXTS 3
 
+#if CONFIG_NEW_INTER_MODES
+#define INTER_OFFSET(mode) ((mode)-NEARMV)
+#define INTER_COMPOUND_OFFSET(mode) (uint8_t)((mode)-NEAR_NEARMV)
+#else
 #define INTER_OFFSET(mode) ((mode)-NEARESTMV)
 #define INTER_COMPOUND_OFFSET(mode) (uint8_t)((mode)-NEAREST_NEARESTMV)
-
+#endif  // CONFIG_NEW_INTER_MODES
 // Number of possible contexts for a color index.
 // As can be seen from av1_get_palette_color_index_context(), the possible
 // contexts are (2,0,0), (2,2,1), (3,2,0), (4,1,0), (5,0,0). These are mapped to
@@ -84,10 +88,16 @@ typedef struct frame_contexts {
   aom_cdf_prob coeff_br_cdf[TX_SIZES][PLANE_TYPES][LEVEL_CONTEXTS]
                            [CDF_SIZE(BR_CDF_SIZE)];
 
+#if CONFIG_NEW_INTER_MODES
+  aom_cdf_prob inter_single_mode_cdf[INTER_SINGLE_MODE_CONTEXTS]
+                                    [CDF_SIZE(INTER_SINGLE_MODES)];
+  aom_cdf_prob drl_cdf[3][DRL_MODE_CONTEXTS][CDF_SIZE(2)];
+#else
   aom_cdf_prob newmv_cdf[NEWMV_MODE_CONTEXTS][CDF_SIZE(2)];
   aom_cdf_prob zeromv_cdf[GLOBALMV_MODE_CONTEXTS][CDF_SIZE(2)];
-  aom_cdf_prob refmv_cdf[REFMV_MODE_CONTEXTS][CDF_SIZE(2)];
   aom_cdf_prob drl_cdf[DRL_MODE_CONTEXTS][CDF_SIZE(2)];
+  aom_cdf_prob refmv_cdf[REFMV_MODE_CONTEXTS][CDF_SIZE(2)];
+#endif  // CONFIG_NEW_INTER_MODES
 
   aom_cdf_prob inter_compound_mode_cdf[INTER_COMPOUND_MODE_CONTEXTS]
                                       [CDF_SIZE(INTER_COMPOUND_MODES)];
@@ -118,7 +128,14 @@ typedef struct frame_contexts {
                                [CDF_SIZE(2)];
   aom_cdf_prob comp_ref_cdf[REF_CONTEXTS][FWD_REFS - 1][CDF_SIZE(2)];
   aom_cdf_prob comp_bwdref_cdf[REF_CONTEXTS][BWD_REFS - 1][CDF_SIZE(2)];
+#if CONFIG_NEW_TX_PARTITION
+  aom_cdf_prob inter_4way_txfm_partition_cdf[2][TXFM_PARTITION_INTER_CONTEXTS]
+                                            [CDF_SIZE(4)];
+  aom_cdf_prob inter_2way_txfm_partition_cdf[CDF_SIZE(2)];
+  aom_cdf_prob inter_2way_rect_txfm_partition_cdf[CDF_SIZE(2)];
+#else   // CONFIG_NEW_TX_PARTITION
   aom_cdf_prob txfm_partition_cdf[TXFM_PARTITION_CONTEXTS][CDF_SIZE(2)];
+#endif  // CONFIG_NEW_TX_PARTITION
   aom_cdf_prob compound_index_cdf[COMP_INDEX_CONTEXTS][CDF_SIZE(2)];
   aom_cdf_prob comp_group_idx_cdf[COMP_GROUP_IDX_CONTEXTS][CDF_SIZE(2)];
   aom_cdf_prob skip_mode_cdfs[SKIP_MODE_CONTEXTS][CDF_SIZE(2)];
@@ -136,6 +153,9 @@ typedef struct frame_contexts {
   aom_cdf_prob y_mode_cdf[BLOCK_SIZE_GROUPS][CDF_SIZE(INTRA_MODES)];
   aom_cdf_prob uv_mode_cdf[CFL_ALLOWED_TYPES][INTRA_MODES]
                           [CDF_SIZE(UV_INTRA_MODES)];
+#if CONFIG_MRLS
+  aom_cdf_prob mrl_index_cdf[CDF_SIZE(MRL_LINE_NUMBER)];
+#endif
 #if CONFIG_SDP
   aom_cdf_prob partition_cdf[PARTITION_STRUCTURE_NUM][PARTITION_CONTEXTS]
                             [CDF_SIZE(EXT_PARTITION_TYPES)];
@@ -158,13 +178,29 @@ typedef struct frame_contexts {
 #if CONFIG_SDP
   aom_cdf_prob angle_delta_cdf[PARTITION_STRUCTURE_NUM][DIRECTIONAL_MODES]
                               [CDF_SIZE(2 * MAX_ANGLE_DELTA + 1)];
+#if CONFIG_ORIP
+  aom_cdf_prob angle_delta_cdf_hv[PARTITION_STRUCTURE_NUM]
+                                 [TOTAL_NUM_ORIP_ANGLE_DELTA]
+                                 [CDF_SIZE(2 * MAX_ANGLE_DELTA + 1 +
+                                           ADDITIONAL_ANGLE_DELTA)];
+#endif
 #else
   aom_cdf_prob angle_delta_cdf[DIRECTIONAL_MODES]
                               [CDF_SIZE(2 * MAX_ANGLE_DELTA + 1)];
+#if CONFIG_ORIP
+  aom_cdf_prob angle_delta_cdf_hv[TOTAL_NUM_ORIP_ANGLE_DELTA][CDF_SIZE(
+      2 * MAX_ANGLE_DELTA + 1 + ADDITIONAL_ANGLE_DELTA)];
+#endif
 #endif
 
+#if CONFIG_NEW_TX_PARTITION
+  aom_cdf_prob intra_4way_txfm_partition_cdf[2][TX_SIZE_CONTEXTS][CDF_SIZE(4)];
+  aom_cdf_prob intra_2way_txfm_partition_cdf[CDF_SIZE(2)];
+  aom_cdf_prob intra_2way_rect_txfm_partition_cdf[CDF_SIZE(2)];
+#else
   aom_cdf_prob tx_size_cdf[MAX_TX_CATS][TX_SIZE_CONTEXTS]
                           [CDF_SIZE(MAX_TX_DEPTH + 1)];
+#endif  // CONFIG_NEW_TX_PARTITION
   aom_cdf_prob delta_q_cdf[CDF_SIZE(DELTA_Q_PROBS + 1)];
   aom_cdf_prob delta_lf_multi_cdf[FRAME_LF_COUNT][CDF_SIZE(DELTA_LF_PROBS + 1)];
   aom_cdf_prob delta_lf_cdf[CDF_SIZE(DELTA_LF_PROBS + 1)];
@@ -174,6 +210,9 @@ typedef struct frame_contexts {
                                [CDF_SIZE(TX_TYPES)];
   aom_cdf_prob cfl_sign_cdf[CDF_SIZE(CFL_JOINT_SIGNS)];
   aom_cdf_prob cfl_alpha_cdf[CFL_ALPHA_CONTEXTS][CDF_SIZE(CFL_ALPHABET_SIZE)];
+#if CONFIG_IST
+  aom_cdf_prob stx_cdf[TX_SIZES][CDF_SIZE(STX_TYPES)];
+#endif
   int initialized;
 } FRAME_CONTEXT;
 
@@ -211,6 +250,39 @@ static INLINE int av1_ceil_log2(int n) {
   }
   return i;
 }
+
+#if CONFIG_NEW_INTER_MODES
+static INLINE int16_t inter_single_mode_ctx(int16_t mode_ctx) {
+  // refmv_ctx values 2 and 4 are mapped to binary 1 while the rest map to 0.
+  // This is intended to capture the case of ref_match_count >= 2 in
+  // setup_ref_mv_list() function in mvref_common.c as a limited binary
+  // context in addition to newmv_ctx and zeromv_ctx.
+  // TODO(debargha, elliottk): Measure how much the limited refmv_ctx
+  // actually helps
+  static const int refmv_ctx_to_isrefmv_ctx[REFMV_MODE_CONTEXTS] = { 0, 0, 1,
+                                                                     0, 1, 0 };
+  const int16_t newmv_ctx = mode_ctx & NEWMV_CTX_MASK;
+  assert(newmv_ctx < NEWMV_MODE_CONTEXTS);
+  const int16_t zeromv_ctx = (mode_ctx >> GLOBALMV_OFFSET) & GLOBALMV_CTX_MASK;
+  const int16_t refmv_ctx = (mode_ctx >> REFMV_OFFSET) & REFMV_CTX_MASK;
+  const int16_t isrefmv_ctx = refmv_ctx_to_isrefmv_ctx[refmv_ctx];
+  const int16_t ctx =
+      GLOBALMV_MODE_CONTEXTS * ISREFMV_MODE_CONTEXTS * newmv_ctx +
+      ISREFMV_MODE_CONTEXTS * zeromv_ctx + isrefmv_ctx;
+  assert(ctx < INTER_SINGLE_MODE_CONTEXTS);
+  return ctx;
+}
+
+// Note mode_ctx is the same context used to decode mode information
+static INLINE int16_t av1_drl_ctx(int16_t mode_ctx) {
+  const int16_t newmv_ctx = mode_ctx & NEWMV_CTX_MASK;
+  assert(newmv_ctx < NEWMV_MODE_CONTEXTS);
+  const int16_t zeromv_ctx = (mode_ctx >> GLOBALMV_OFFSET) & GLOBALMV_CTX_MASK;
+  const int16_t ctx = GLOBALMV_MODE_CONTEXTS * newmv_ctx + zeromv_ctx;
+  assert(ctx < DRL_MODE_CONTEXTS);
+  return ctx;
+}
+#endif  // CONFIG_NEW_INTER_MODES
 
 // Returns the context for palette color index at row 'r' and column 'c',
 // along with the 'color_order' of neighbors and the 'color_idx'.

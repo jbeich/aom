@@ -71,6 +71,13 @@ static const aom_cdf_prob
         { AOM_CDF13(7618, 8288, 9859, 10509, 15386, 18657, 22903, 28776, 29180,
                     31355, 31802, 32593) } }
     };
+
+#if CONFIG_MRLS
+static const aom_cdf_prob default_mrl_index_cdf[CDF_SIZE(MRL_LINE_NUMBER)] = {
+  AOM_CDF4(24756, 29049, 31092)
+};
+#endif
+
 #if CONFIG_SDP
 static const aom_cdf_prob default_angle_delta_cdf
     [PARTITION_STRUCTURE_NUM][DIRECTIONAL_MODES]
@@ -92,6 +99,22 @@ static const aom_cdf_prob default_angle_delta_cdf
         { AOM_CDF7(2240, 11096, 15453, 20341, 22561, 28917) },
         { AOM_CDF7(3605, 10428, 12459, 17676, 21244, 30655) } }
     };
+
+#if CONFIG_ORIP
+static const aom_cdf_prob default_angle_delta_cdf_hv
+    [PARTITION_STRUCTURE_NUM][TOTAL_NUM_ORIP_ANGLE_DELTA]
+    [CDF_SIZE(2 * MAX_ANGLE_DELTA + 1 + ADDITIONAL_ANGLE_DELTA)] = {
+      {
+          { AOM_CDF8(1180, 3032, 4567, 19776, 22989, 25217, 26639) },
+          { AOM_CDF8(1301, 3608, 5801, 20487, 22974, 25330, 26371) },
+      },
+      {
+          { AOM_CDF8(1180, 3032, 4567, 19776, 22989, 25217, 26639) },
+          { AOM_CDF8(1301, 3608, 5801, 20487, 22974, 25330, 26371) },
+      }
+    };
+
+#endif
 #else
 static const aom_cdf_prob default_angle_delta_cdf[DIRECTIONAL_MODES][CDF_SIZE(
     2 * MAX_ANGLE_DELTA + 1)] = {
@@ -104,6 +127,15 @@ static const aom_cdf_prob default_angle_delta_cdf[DIRECTIONAL_MODES][CDF_SIZE(
   { AOM_CDF7(2240, 11096, 15453, 20341, 22561, 28917) },
   { AOM_CDF7(3605, 10428, 12459, 17676, 21244, 30655) }
 };
+#if CONFIG_ORIP
+static const aom_cdf_prob
+    default_angle_delta_cdf_hv[TOTAL_NUM_ORIP_ANGLE_DELTA][CDF_SIZE(
+        2 * MAX_ANGLE_DELTA + 1 + ADDITIONAL_ANGLE_DELTA)] = {
+      { AOM_CDF8(1180, 3032, 4567, 19776, 22989, 25217, 26639) },
+      { AOM_CDF8(1301, 3608, 5801, 20487, 22974, 25330, 26371) },
+    };
+
+#endif
 #endif
 
 static const aom_cdf_prob default_if_y_mode_cdf[BLOCK_SIZE_GROUPS][CDF_SIZE(
@@ -648,7 +680,56 @@ static const aom_cdf_prob
       { AOM_CDF3(31022, 32009) }, { AOM_CDF3(2963, 32093) },
       { AOM_CDF3(601, 943) },     { AOM_CDF3(14969, 21398) }
     };
+#if CONFIG_NEW_INTER_MODES
+static const aom_cdf_prob
+    default_inter_single_mode_cdf[INTER_SINGLE_MODE_CONTEXTS][CDF_SIZE(
+        INTER_SINGLE_MODES)] = {
+      { AOM_CDF3(17346, 18771) }, { AOM_CDF3(10923, 21845) },
+      { AOM_CDF3(8838, 9132) },   { AOM_CDF3(10923, 21845) },
+      { AOM_CDF3(17910, 18959) }, { AOM_CDF3(16927, 17852) },
+      { AOM_CDF3(11632, 11810) }, { AOM_CDF3(12506, 12827) },
+      { AOM_CDF3(15831, 17676) }, { AOM_CDF3(15236, 17070) },
+      { AOM_CDF3(13715, 13809) }, { AOM_CDF3(13869, 14031) },
+      { AOM_CDF3(25678, 26470) }, { AOM_CDF3(23151, 23634) },
+      { AOM_CDF3(21431, 21612) }, { AOM_CDF3(19838, 20021) },
+      { AOM_CDF3(19562, 20206) }, { AOM_CDF3(10923, 21845) },
+      { AOM_CDF3(14966, 15103) }, { AOM_CDF3(10923, 21845) },
+      { AOM_CDF3(27072, 28206) }, { AOM_CDF3(10923, 21845) },
+      { AOM_CDF3(24626, 24936) }, { AOM_CDF3(10923, 21845) }
+    };
 
+static const aom_cdf_prob default_drl0_cdf[DRL_MODE_CONTEXTS][CDF_SIZE(2)] = {
+  { AOM_CDF2(26658) }, { AOM_CDF2(22485) }, { AOM_CDF2(19400) },
+  { AOM_CDF2(17600) }, { AOM_CDF2(23001) }, { AOM_CDF2(25649) },
+  { AOM_CDF2(25420) }, { AOM_CDF2(25271) }, { AOM_CDF2(15742) },
+  { AOM_CDF2(16468) }, { AOM_CDF2(21428) }, { AOM_CDF2(21326) }
+};
+
+static const aom_cdf_prob default_drl1_cdf[DRL_MODE_CONTEXTS][CDF_SIZE(2)] = {
+  { AOM_CDF2(19705) }, { AOM_CDF2(15838) }, { AOM_CDF2(18496) },
+  { AOM_CDF2(18312) }, { AOM_CDF2(15248) }, { AOM_CDF2(16292) },
+  { AOM_CDF2(15982) }, { AOM_CDF2(16247) }, { AOM_CDF2(17936) },
+  { AOM_CDF2(22903) }, { AOM_CDF2(16244) }, { AOM_CDF2(19319) }
+};
+
+static const aom_cdf_prob default_drl2_cdf[DRL_MODE_CONTEXTS][CDF_SIZE(2)] = {
+  { AOM_CDF2(12992) }, { AOM_CDF2(7518) },  { AOM_CDF2(18309) },
+  { AOM_CDF2(17119) }, { AOM_CDF2(15195) }, { AOM_CDF2(15214) },
+  { AOM_CDF2(16777) }, { AOM_CDF2(16998) }, { AOM_CDF2(14311) },
+  { AOM_CDF2(16618) }, { AOM_CDF2(14980) }, { AOM_CDF2(15963) }
+};
+
+static const aom_cdf_prob
+    default_inter_compound_mode_cdf[INTER_COMPOUND_MODE_CONTEXTS][CDF_SIZE(
+        INTER_COMPOUND_MODES)] = { { AOM_CDF5(10510, 17103, 22330, 24536) },
+                                   { AOM_CDF5(14805, 20117, 24655, 25891) },
+                                   { AOM_CDF5(15700, 20333, 24425, 25305) },
+                                   { AOM_CDF5(15047, 20124, 24840, 25223) },
+                                   { AOM_CDF5(22632, 25637, 28394, 29608) },
+                                   { AOM_CDF5(15703, 20315, 24653, 25122) },
+                                   { AOM_CDF5(22458, 25512, 28304, 29008) },
+                                   { AOM_CDF5(21368, 24274, 26890, 27364) } };
+#else
 static const aom_cdf_prob default_newmv_cdf[NEWMV_MODE_CONTEXTS][CDF_SIZE(
     2)] = { { AOM_CDF2(24035) }, { AOM_CDF2(16630) }, { AOM_CDF2(15339) },
             { AOM_CDF2(8386) },  { AOM_CDF2(12222) }, { AOM_CDF2(4676) } };
@@ -676,7 +757,7 @@ static const aom_cdf_prob
       { AOM_CDF8(17125, 24273, 25814, 27492, 28214, 28704, 30592) },
       { AOM_CDF8(13046, 23214, 24505, 25942, 27435, 28442, 29330) }
     };
-
+#endif  // CONFIG_NEW_INTER_MODES
 static const aom_cdf_prob default_interintra_cdf[BLOCK_SIZE_GROUPS][CDF_SIZE(
     2)] = { { AOM_CDF2(16384) },
             { AOM_CDF2(26887) },
@@ -996,6 +1077,44 @@ static const aom_cdf_prob default_palette_uv_color_index_cdf
       },
     };
 
+#if CONFIG_NEW_TX_PARTITION
+static const aom_cdf_prob default_inter_4way_txfm_partition_cdf
+    [2][TXFM_PARTITION_INTER_CONTEXTS][CDF_SIZE(4)] = {
+      {
+          // Square
+          { AOM_CDF4(28581, 29581, 29681) }, { AOM_CDF4(28581, 29581, 29681) },
+          { AOM_CDF4(28581, 29581, 29681) }, { AOM_CDF4(28581, 29581, 29681) },
+          { AOM_CDF4(28581, 29581, 29681) }, { AOM_CDF4(28581, 29581, 29681) },
+          { AOM_CDF4(28581, 29581, 29681) }, { AOM_CDF4(28581, 29581, 29681) },
+          { AOM_CDF4(28581, 29581, 29681) }, { AOM_CDF4(28581, 29581, 29681) },
+          { AOM_CDF4(28581, 29581, 29681) }, { AOM_CDF4(28581, 29581, 29681) },
+          { AOM_CDF4(28581, 29581, 29681) }, { AOM_CDF4(28581, 29581, 29681) },
+          { AOM_CDF4(28581, 29581, 29681) }, { AOM_CDF4(28581, 29581, 29681) },
+          { AOM_CDF4(28581, 29581, 29681) }, { AOM_CDF4(28581, 29581, 29681) },
+          { AOM_CDF4(28581, 29581, 29681) }, { AOM_CDF4(28581, 29581, 29681) },
+          { AOM_CDF4(28581, 29581, 29681) },
+      },
+      {
+          // Rectangular
+          { AOM_CDF4(28581, 29581, 29681) }, { AOM_CDF4(28581, 29581, 29681) },
+          { AOM_CDF4(28581, 29581, 29681) }, { AOM_CDF4(28581, 29581, 29681) },
+          { AOM_CDF4(28581, 29581, 29681) }, { AOM_CDF4(28581, 29581, 29681) },
+          { AOM_CDF4(28581, 29581, 29681) }, { AOM_CDF4(28581, 29581, 29681) },
+          { AOM_CDF4(28581, 29581, 29681) }, { AOM_CDF4(28581, 29581, 29681) },
+          { AOM_CDF4(28581, 29581, 29681) }, { AOM_CDF4(28581, 29581, 29681) },
+          { AOM_CDF4(28581, 29581, 29681) }, { AOM_CDF4(28581, 29581, 29681) },
+          { AOM_CDF4(28581, 29581, 29681) }, { AOM_CDF4(28581, 29581, 29681) },
+          { AOM_CDF4(28581, 29581, 29681) }, { AOM_CDF4(28581, 29581, 29681) },
+          { AOM_CDF4(28581, 29581, 29681) }, { AOM_CDF4(28581, 29581, 29681) },
+          { AOM_CDF4(28581, 29581, 29681) },
+      }
+    };
+static const aom_cdf_prob default_inter_2way_txfm_partition_cdf[CDF_SIZE(2)] = {
+  AOM_CDF2(30531)
+};
+static const aom_cdf_prob default_inter_2way_rect_txfm_partition_cdf[CDF_SIZE(
+    2)] = { AOM_CDF2(30531) };
+#else   // CONFIG_NEW_TX_PARTITION
 static const aom_cdf_prob
     default_txfm_partition_cdf[TXFM_PARTITION_CONTEXTS][CDF_SIZE(2)] = {
       { AOM_CDF2(28581) }, { AOM_CDF2(23846) }, { AOM_CDF2(20847) },
@@ -1006,6 +1125,7 @@ static const aom_cdf_prob
       { AOM_CDF2(28015) }, { AOM_CDF2(21546) }, { AOM_CDF2(14400) },
       { AOM_CDF2(28165) }, { AOM_CDF2(22401) }, { AOM_CDF2(16088) }
     };
+#endif  // CONFIG_NEW_TX_PARTITION
 
 static const aom_cdf_prob default_skip_txfm_cdfs[SKIP_CONTEXTS][CDF_SIZE(2)] = {
   { AOM_CDF2(31671) }, { AOM_CDF2(16515) }, { AOM_CDF2(4576) }
@@ -1098,6 +1218,22 @@ static const aom_cdf_prob
       },
     };
 
+#if CONFIG_NEW_TX_PARTITION
+static const aom_cdf_prob
+    default_intra_4way_txfm_partition_cdf[2][TX_SIZE_CONTEXTS][CDF_SIZE(4)] = {
+      { { AOM_CDF4(19968, 20968, 21968) },
+        { AOM_CDF4(19968, 20968, 21968) },
+        { AOM_CDF4(24320, 25320, 26320) } },
+      { { AOM_CDF4(12272, 13272, 14272) },
+        { AOM_CDF4(12272, 13272, 14272) },
+        { AOM_CDF4(18677, 19677, 20677) } },
+    };
+static const aom_cdf_prob default_intra_2way_txfm_partition_cdf[CDF_SIZE(2)] = {
+  AOM_CDF2(30531)
+};
+static const aom_cdf_prob default_intra_2way_rect_txfm_partition_cdf[CDF_SIZE(
+    2)] = { AOM_CDF2(30531) };
+#else   // CONFIG_NEW_TX_PARTITION
 static const aom_cdf_prob default_tx_size_cdf[MAX_TX_CATS][TX_SIZE_CONTEXTS]
                                              [CDF_SIZE(MAX_TX_DEPTH + 1)] = {
                                                { { AOM_CDF2(19968) },
@@ -1113,6 +1249,15 @@ static const aom_cdf_prob default_tx_size_cdf[MAX_TX_CATS][TX_SIZE_CONTEXTS]
                                                  { AOM_CDF3(5782, 11475) },
                                                  { AOM_CDF3(16803, 22759) } },
                                              };
+#endif  // CONFIG_NEW_TX_PARTITION
+
+#if CONFIG_IST
+static const aom_cdf_prob default_stx_cdf[TX_SIZES][CDF_SIZE(STX_TYPES)] = {
+  { AOM_CDF4(8192, 16384, 24576) }, { AOM_CDF4(8192, 16384, 24576) },
+  { AOM_CDF4(8192, 16384, 24576) }, { AOM_CDF4(8192, 16384, 24576) },
+  { AOM_CDF4(8192, 16384, 24576) },
+};
+#endif
 
 #define MAX_COLOR_CONTEXT_HASH 8
 // Negative values are invalid
@@ -1313,6 +1458,9 @@ static void init_mode_probs(FRAME_CONTEXT *fc) {
   av1_copy(fc->palette_y_color_index_cdf, default_palette_y_color_index_cdf);
   av1_copy(fc->palette_uv_color_index_cdf, default_palette_uv_color_index_cdf);
   av1_copy(fc->kf_y_cdf, default_kf_y_mode_cdf);
+#if CONFIG_ORIP
+  av1_copy(fc->angle_delta_cdf_hv, default_angle_delta_cdf_hv);
+#endif
   av1_copy(fc->angle_delta_cdf, default_angle_delta_cdf);
   av1_copy(fc->comp_inter_cdf, default_comp_inter_cdf);
   av1_copy(fc->comp_ref_type_cdf, default_comp_ref_type_cdf);
@@ -1322,15 +1470,31 @@ static void init_mode_probs(FRAME_CONTEXT *fc) {
   av1_copy(fc->comp_ref_cdf, default_comp_ref_cdf);
   av1_copy(fc->comp_bwdref_cdf, default_comp_bwdref_cdf);
   av1_copy(fc->single_ref_cdf, default_single_ref_cdf);
+#if CONFIG_NEW_TX_PARTITION
+  av1_copy(fc->inter_4way_txfm_partition_cdf,
+           default_inter_4way_txfm_partition_cdf);
+  av1_copy(fc->inter_2way_txfm_partition_cdf,
+           default_inter_2way_txfm_partition_cdf);
+  av1_copy(fc->inter_2way_rect_txfm_partition_cdf,
+           default_inter_2way_rect_txfm_partition_cdf);
+#else
   av1_copy(fc->txfm_partition_cdf, default_txfm_partition_cdf);
+#endif  // CONFIG_NEW_TX_PARTITION
 #if !CONFIG_REMOVE_DIST_WTD_COMP
   av1_copy(fc->compound_index_cdf, default_compound_idx_cdfs);
 #endif  // !CONFIG_REMOVE_DIST_WTD_COMP
   av1_copy(fc->comp_group_idx_cdf, default_comp_group_idx_cdfs);
+#if CONFIG_NEW_INTER_MODES
+  av1_copy(fc->inter_single_mode_cdf, default_inter_single_mode_cdf);
+  av1_copy(fc->drl_cdf[0], default_drl0_cdf);
+  av1_copy(fc->drl_cdf[1], default_drl1_cdf);
+  av1_copy(fc->drl_cdf[2], default_drl2_cdf);
+#else
   av1_copy(fc->newmv_cdf, default_newmv_cdf);
   av1_copy(fc->zeromv_cdf, default_zeromv_cdf);
   av1_copy(fc->refmv_cdf, default_refmv_cdf);
   av1_copy(fc->drl_cdf, default_drl_cdf);
+#endif  // CONFIG_NEW_INTER_MODES
   av1_copy(fc->motion_mode_cdf, default_motion_mode_cdf);
   av1_copy(fc->obmc_cdf, default_obmc_cdf);
   av1_copy(fc->inter_compound_mode_cdf, default_inter_compound_mode_cdf);
@@ -1348,6 +1512,9 @@ static void init_mode_probs(FRAME_CONTEXT *fc) {
   av1_copy(fc->sgrproj_restore_cdf, default_sgrproj_restore_cdf);
   av1_copy(fc->y_mode_cdf, default_if_y_mode_cdf);
   av1_copy(fc->uv_mode_cdf, default_uv_mode_cdf);
+#if CONFIG_MRLS
+  av1_copy(fc->mrl_index_cdf, default_mrl_index_cdf);
+#endif
   av1_copy(fc->switchable_interp_cdf, default_switchable_interp_cdf);
   av1_copy(fc->partition_cdf, default_partition_cdf);
 #if CONFIG_EXT_RECUR_PARTITIONS
@@ -1361,13 +1528,25 @@ static void init_mode_probs(FRAME_CONTEXT *fc) {
   for (int i = 0; i < SPATIAL_PREDICTION_PROBS; i++)
     av1_copy(fc->seg.spatial_pred_seg_cdf[i],
              default_spatial_pred_seg_tree_cdf[i]);
+#if CONFIG_NEW_TX_PARTITION
+  av1_copy(fc->intra_4way_txfm_partition_cdf,
+           default_intra_4way_txfm_partition_cdf);
+  av1_copy(fc->intra_2way_txfm_partition_cdf,
+           default_intra_2way_txfm_partition_cdf);
+  av1_copy(fc->intra_2way_rect_txfm_partition_cdf,
+           default_intra_2way_rect_txfm_partition_cdf);
+#else
   av1_copy(fc->tx_size_cdf, default_tx_size_cdf);
+#endif  // CONFIG_NEW_TX_PARTITION
   av1_copy(fc->delta_q_cdf, default_delta_q_cdf);
   av1_copy(fc->delta_lf_cdf, default_delta_lf_cdf);
   av1_copy(fc->delta_lf_multi_cdf, default_delta_lf_multi_cdf);
   av1_copy(fc->cfl_sign_cdf, default_cfl_sign_cdf);
   av1_copy(fc->cfl_alpha_cdf, default_cfl_alpha_cdf);
   av1_copy(fc->intrabc_cdf, default_intrabc_cdf);
+#if CONFIG_IST
+  av1_copy(fc->stx_cdf, default_stx_cdf);
+#endif
 }
 
 void av1_set_default_ref_deltas(int8_t *ref_deltas) {

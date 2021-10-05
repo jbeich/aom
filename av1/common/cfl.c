@@ -417,6 +417,7 @@ void cfl_store_block(MACROBLOCKD *const xd, BLOCK_SIZE bsize, TX_SIZE tx_size) {
   const int col_offset = mi_col - xd->mi[0]->chroma_ref_info.mi_col_chroma_base;
 
   tx_size = get_tx_size(width, height);
+  assert(tx_size != TX_INVALID);
 #if CONFIG_SDP
   cfl_store(xd, cfl, pd->dst.buf, pd->dst.stride, row_offset, col_offset,
             tx_size, is_cur_buf_hbd(xd));

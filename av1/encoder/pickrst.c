@@ -1041,7 +1041,12 @@ static int linsolve_wiener(int n, int64_t *A, int stride, int64_t *b,
       for (int j = 0; j < n; j++) {
         A[(i + 1) * stride + j] -= c / 256 * A[k * stride + j] / cd * 256;
       }
-      b[i + 1] -= c * b[k] / cd;
+      if (llabs(c) > INT_MAX || llabs(b[k]) > INT_MAX) {
+        // Reduce the probability of overflow by computing at lower precision
+        b[i + 1] -= AOMMAX(c, b[k]) / 256 * AOMMIN(c, b[k]) / cd * 256;
+      } else {
+        b[i + 1] -= c * b[k] / cd;
+      }
     }
   }
   // Back-substitution
@@ -1445,6 +1450,9 @@ static AOM_INLINE void search_wiener(const RestorationTileLimits *limits,
     const int scale[3] = { 0, 1, 2 };
     // Obtain the normalized Qscale
     const int qs = av1_dc_quant_QTX(rsc->cm->quant_params.base_qindex, 0,
+#if CONFIG_EXTQUANT
+                                    rsc->cm->seq_params.base_y_dc_delta_q,
+#endif
                                     rsc->cm->seq_params.bit_depth) >>
                    3;
     // Derive threshold as sqr(normalized Qscale) * scale / 16,

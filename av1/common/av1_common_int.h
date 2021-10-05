@@ -59,6 +59,14 @@ extern "C" {
 #define FRAME_ID_LENGTH 15
 #define DELTA_FRAME_ID_LENGTH 14
 
+#if CONFIG_EXTQUANT
+#define DELTA_DCQUANT_BITS 5
+#define DELTA_DCQUANT_MAX (1 << (DELTA_DCQUANT_BITS - 2))
+#define DELTA_DCQUANT_MIN (DELTA_DCQUANT_MAX - (1 << DELTA_DCQUANT_BITS) + 1)
+#endif  // CONFIG_EXTQUANT
+
+#define DEBUG_EXTQUANT 0
+
 #define FRAME_CONTEXTS (FRAME_BUFFERS + 1)
 // Extra frame context which is always kept at default values
 #define FRAME_CONTEXT_DEFAULTS (FRAME_CONTEXTS - 1)
@@ -205,6 +213,20 @@ typedef struct {
   int cdef_bits; /*!< Number of CDEF strength values in bits */
 } CdefInfo;
 
+#if CONFIG_CCSO
+/** ccso info */
+typedef struct {
+  /** ccso enable */
+  bool ccso_enable[2];
+  /** ccso filter offset */
+  int8_t filter_offset[2][16];
+  /** quant index */
+  uint8_t quant_idx[2];
+  /** extended filter support */
+  uint8_t ext_filter_support[2];
+} CcsoInfo;
+#endif
+
 /*!\cond */
 
 typedef struct {
@@ -269,8 +291,18 @@ typedef struct SequenceHeader {
 #if CONFIG_SDP
   uint8_t enable_sdp;  // enables/disables semi-decoupled partitioning
 #endif
-  uint8_t enable_filter_intra;         // enables/disables filterintra
-  uint8_t enable_intra_edge_filter;    // enables/disables edge upsampling
+#if CONFIG_MRLS
+  uint8_t enable_mrls;  // enables/disables multiple reference line selection
+#endif
+  uint8_t enable_filter_intra;       // enables/disables filterintra
+  uint8_t enable_intra_edge_filter;  // enables/disables edge upsampling
+
+#if CONFIG_ORIP
+  uint8_t enable_orip;  // To turn on/off sub-block based ORIP
+#endif
+#if CONFIG_IST
+  uint8_t enable_ist;  // enables/disables intra secondary transform
+#endif
   uint8_t enable_interintra_compound;  // enables/disables interintra_compound
   uint8_t enable_masked_compound;      // enables/disables masked compound
 #if !CONFIG_REMOVE_DUAL_FILTER
@@ -284,7 +316,11 @@ typedef struct SequenceHeader {
                                  // 1 - Enable superres for the sequence
                                  //     enable per-frame superres flag
   uint8_t enable_cdef;           // To turn on/off CDEF
-  uint8_t enable_restoration;    // To turn on/off loop restoration
+
+  uint8_t enable_restoration;  // To turn on/off loop restoration
+#if CONFIG_CCSO
+  uint8_t enable_ccso;  // To turn on/off CCSO
+#endif
   BITSTREAM_PROFILE profile;
 
   // Color config.
@@ -300,6 +336,10 @@ typedef struct SequenceHeader {
   int subsampling_y;  // Chroma subsampling for y
   aom_chroma_sample_position_t chroma_sample_position;
   uint8_t separate_uv_delta_q;
+#if CONFIG_EXTQUANT
+  int8_t base_y_dc_delta_q;
+  int8_t base_uv_dc_delta_q;
+#endif  // CONFIG_EXTQUANT
   uint8_t film_grain_params_present;
 
   // Operating point info.
@@ -411,6 +451,12 @@ typedef struct {
    * a frame decode.
    */
   REFRESH_FRAME_CONTEXT_MODE refresh_frame_context;
+#if CONFIG_NEW_INTER_MODES
+  /*!
+   * Max_drl_bits. Note number of ref MVs allowed is max_drl_bits + 1
+   */
+  int max_drl_bits;
+#endif  // CONFIG_NEW_INTER_MODES
 } FeatureFlags;
 
 /*!
@@ -563,6 +609,10 @@ struct CommonModeInfoParams {
    * Number of allocated elements is same as 'mi_grid_size', and stride is
    * same as 'mi_grid_size'. So, indexing into 'tx_type_map' is same as that of
    * 'mi_grid_base'.
+   * If secondary transform in enabled (CONFIG_IST) each element of the array
+   * stores both primary and secondary transform types as shown below: Bits 4~5
+   * of each element stores secondary tx_type Bits 0~3 of each element stores
+   * primary tx_type
    */
   TX_TYPE *tx_type_map;
 
@@ -666,9 +716,15 @@ struct CommonQuantParams {
    * shift/scale as TX.
    */
   /**@{*/
+#if CONFIG_EXTQUANT
+  int32_t y_dequant_QTX[MAX_SEGMENTS][2]; /*!< Dequant for Y plane */
+  int32_t u_dequant_QTX[MAX_SEGMENTS][2]; /*!< Dequant for U plane */
+  int32_t v_dequant_QTX[MAX_SEGMENTS][2]; /*!< Dequant for V plane */
+#else
   int16_t y_dequant_QTX[MAX_SEGMENTS][2]; /*!< Dequant for Y plane */
   int16_t u_dequant_QTX[MAX_SEGMENTS][2]; /*!< Dequant for U plane */
   int16_t v_dequant_QTX[MAX_SEGMENTS][2]; /*!< Dequant for V plane */
+#endif
   /**@}*/
 
   /**
@@ -983,6 +1039,13 @@ typedef struct AV1Common {
    */
   CdefInfo cdef_info;
 
+#if CONFIG_CCSO
+  /*!
+   * CCSO (Cross Component Sample Offset) parameters.
+   */
+  CcsoInfo ccso_info;
+#endif
+
   /*!
    * Parameters for film grain synthesis.
    */
@@ -1064,7 +1127,12 @@ typedef struct AV1Common {
    * TODO(jingning): This can be combined with sign_bias later.
    */
   int8_t ref_frame_side[REF_FRAMES];
-
+#if CONFIG_SMVP_IMPROVEMENT
+  /*!
+   * relative distance between reference 'k' and current frame.
+   */
+  int8_t ref_frame_relative_dist[REF_FRAMES];
+#endif  // CONFIG_SMVP_IMPROVEMENT
   /*!
    * Number of temporal layers: may be > 1 for SVC (scalable vector coding).
    */
@@ -1100,6 +1168,11 @@ typedef struct AV1Common {
 #if CONFIG_LPF_MASK
   int is_decoding;
 #endif  // CONFIG_LPF_MASK
+
+#if DEBUG_EXTQUANT
+  FILE *fEncCoeffLog;
+  FILE *fDecCoeffLog;
+#endif
 } AV1_COMMON;
 
 /*!\cond */
@@ -1944,38 +2017,179 @@ static INLINE TX_SIZE get_tx_size(int width, int height) {
   if (width < height) {
     if (width + width == height) {
       switch (width) {
-        case 4: return TX_4X8; break;
-        case 8: return TX_8X16; break;
-        case 16: return TX_16X32; break;
-        case 32: return TX_32X64; break;
+        case 4: return (height == 8) ? TX_4X8 : TX_INVALID;
+        case 8: return (height == 16) ? TX_8X16 : TX_INVALID;
+        case 16: return (height == 32) ? TX_16X32 : TX_INVALID;
+        case 32: return (height == 64) ? TX_32X64 : TX_INVALID;
       }
     } else {
       switch (width) {
-        case 4: return TX_4X16; break;
-        case 8: return TX_8X32; break;
-        case 16: return TX_16X64; break;
+        case 4: return (height == 16) ? TX_4X16 : TX_INVALID;
+        case 8: return (height == 32) ? TX_8X32 : TX_INVALID;
+        case 16: return (height == 64) ? TX_16X64 : TX_INVALID;
       }
     }
   } else {
     if (height + height == width) {
       switch (height) {
-        case 4: return TX_8X4; break;
-        case 8: return TX_16X8; break;
-        case 16: return TX_32X16; break;
-        case 32: return TX_64X32; break;
+        case 4: return (width == 8) ? TX_8X4 : TX_INVALID;
+        case 8: return (width == 16) ? TX_16X8 : TX_INVALID;
+        case 16: return (width == 32) ? TX_32X16 : TX_INVALID;
+        case 32: return (width == 64) ? TX_64X32 : TX_INVALID;
       }
     } else {
       switch (height) {
-        case 4: return TX_16X4; break;
-        case 8: return TX_32X8; break;
-        case 16: return TX_64X16; break;
+        case 4: return (width == 16) ? TX_16X4 : TX_INVALID;
+        case 8: return (width == 32) ? TX_32X8 : TX_INVALID;
+        case 16: return (width == 64) ? TX_64X16 : TX_INVALID;
       }
     }
   }
-  assert(0);
-  return TX_4X4;
+  return TX_INVALID;
 }
 
+#if CONFIG_NEW_TX_PARTITION
+#define MAX_TX_PARTITIONS 4
+typedef struct {
+  int rows[MAX_TX_PARTITIONS];
+  int cols[MAX_TX_PARTITIONS];
+  int n_partitions;
+} TX_PARTITION_BIT_SHIFT;
+
+// Defines the number of bits to use to divide a block's dimensions
+// to create the tx sizes in each partition.
+// Keep square and rectangular separate for now, but we can potentially
+// merge them in the future.
+static const TX_PARTITION_BIT_SHIFT
+    partition_shift_bits[2][TX_PARTITION_TYPES] = {
+      // Square
+      {
+          { { 0 }, { 0 }, 1 },                    // TX_PARTITION_NONE
+          { { 1, 1, 1, 1 }, { 1, 1, 1, 1 }, 4 },  // TX_PARTITION_SPLIT
+          { { 1, 1 }, { 0, 0 }, 2 },              // TX_PARTITION_HORZ
+          { { 0, 0 }, { 1, 1 }, 2 },              // TX_PARTITION_VERT
+          { { 2, 2, 2, 2 }, { 0, 0, 0, 0 }, 4 },  // TX_PARTITION_HORZ4
+          { { 0, 0, 0, 0 }, { 2, 2, 2, 2 }, 4 },  // TX_PARTITION_VERT4
+      },
+      // Rectangular
+      {
+          { { 0 }, { 0 }, 1 },                    // TX_PARTITION_NONE
+          { { 1, 1, 1, 1 }, { 1, 1, 1, 1 }, 4 },  // TX_PARTITION_SPLIT
+          { { 1, 1 }, { 0, 0 }, 2 },              // TX_PARTITION_HORZ
+          { { 0, 0 }, { 1, 1 }, 2 },              // TX_PARTITION_VERT
+          { { 2, 2, 2, 2 }, { 0, 0, 0, 0 }, 4 },  // TX_PARTITION_HORZ4
+          { { 0, 0, 0, 0 }, { 2, 2, 2, 2 }, 4 },  // TX_PARTITION_VERT4
+      },
+    };
+
+static INLINE int get_tx_partition_sizes(TX_PARTITION_TYPE partition,
+                                         TX_SIZE max_tx_size,
+                                         TX_SIZE sub_txs[MAX_TX_PARTITIONS]) {
+  const int txw = tx_size_wide[max_tx_size];
+  const int txh = tx_size_high[max_tx_size];
+  int sub_txw = 0, sub_txh = 0;
+  const TX_PARTITION_BIT_SHIFT subtx_shift =
+      partition_shift_bits[is_rect_tx(max_tx_size)][partition];
+  const int n_partitions = subtx_shift.n_partitions;
+  for (int i = 0; i < n_partitions; i++) {
+    sub_txw = txw >> subtx_shift.cols[i];
+    sub_txh = txh >> subtx_shift.rows[i];
+    sub_txs[i] = get_tx_size(sub_txw, sub_txh);
+    assert(sub_txs[i] != TX_INVALID);
+  }
+  return n_partitions;
+}
+
+/*
+Gets the type to signal for the 4 way split tree in the tx partition
+type signaling.
+*/
+static INLINE int get_split4_partition(TX_PARTITION_TYPE partition) {
+  switch (partition) {
+    case TX_PARTITION_NONE:
+    case TX_PARTITION_SPLIT:
+    case TX_PARTITION_VERT:
+    case TX_PARTITION_HORZ: return partition;
+    case TX_PARTITION_VERT4: return TX_PARTITION_VERT;
+    case TX_PARTITION_HORZ4: return TX_PARTITION_HORZ;
+    default: assert(0);
+  }
+  assert(0);
+  return 0;
+}
+
+static INLINE int allow_tx_horz_split(TX_SIZE max_tx_size) {
+  const int sub_txw = tx_size_wide[max_tx_size];
+  const int sub_txh = tx_size_high[max_tx_size] >> 1;
+  const TX_SIZE sub_tx_size = get_tx_size(sub_txw, sub_txh);
+  return sub_tx_size != TX_INVALID;
+}
+
+static INLINE int allow_tx_vert_split(TX_SIZE max_tx_size) {
+  const int sub_txw = tx_size_wide[max_tx_size] >> 1;
+  const int sub_txh = tx_size_high[max_tx_size];
+  const TX_SIZE sub_tx_size = get_tx_size(sub_txw, sub_txh);
+  return sub_tx_size != TX_INVALID;
+}
+
+static INLINE int allow_tx_horz4_split(TX_SIZE max_tx_size) {
+  const int sub_txw = tx_size_wide[max_tx_size];
+  const int sub_txh = tx_size_high[max_tx_size] >> 2;
+  const TX_SIZE sub_tx_size = get_tx_size(sub_txw, sub_txh);
+  return sub_tx_size != TX_INVALID;
+}
+
+static INLINE int allow_tx_vert4_split(TX_SIZE max_tx_size) {
+  const int sub_txw = tx_size_wide[max_tx_size] >> 2;
+  const int sub_txh = tx_size_high[max_tx_size];
+  const TX_SIZE sub_tx_size = get_tx_size(sub_txw, sub_txh);
+  return sub_tx_size != TX_INVALID;
+}
+
+static INLINE int use_tx_partition(TX_PARTITION_TYPE partition,
+                                   TX_SIZE max_tx_size) {
+  const int allow_horz = allow_tx_horz_split(max_tx_size);
+  const int allow_vert = allow_tx_vert_split(max_tx_size);
+  const int allow_horz4 = allow_tx_horz4_split(max_tx_size);
+  const int allow_vert4 = allow_tx_vert4_split(max_tx_size);
+  switch (partition) {
+    case TX_PARTITION_NONE: return 1;
+    case TX_PARTITION_SPLIT: return (allow_horz && allow_vert);
+    case TX_PARTITION_HORZ: return allow_horz;
+    case TX_PARTITION_VERT: return allow_vert;
+    case TX_PARTITION_HORZ4: return allow_horz4;
+    case TX_PARTITION_VERT4: return allow_vert4;
+    default: assert(0);
+  }
+  assert(0);
+  return 0;
+}
+
+static INLINE int txfm_partition_split4_inter_context(
+    const TXFM_CONTEXT *const above_ctx, const TXFM_CONTEXT *const left_ctx,
+    BLOCK_SIZE bsize, TX_SIZE tx_size) {
+  const uint8_t txw = tx_size_wide[tx_size];
+  const uint8_t txh = tx_size_high[tx_size];
+  const int above = *above_ctx < txw;
+  const int left = *left_ctx < txh;
+  int category = TXFM_PARTITION_INTER_CONTEXTS;
+
+  // dummy return, not used by others.
+  if (tx_size <= TX_4X4) return 0;
+
+  TX_SIZE max_tx_size =
+      get_sqr_tx_size(AOMMAX(block_size_wide[bsize], block_size_high[bsize]));
+
+  if (max_tx_size >= TX_8X8) {
+    category =
+        (txsize_sqr_up_map[tx_size] != max_tx_size && max_tx_size > TX_8X8) +
+        (TX_SIZES - 1 - max_tx_size) * 2;
+  }
+  assert(category != TXFM_PARTITION_INTER_CONTEXTS);
+  return category * 3 + above + left;
+}
+
+#else
 static INLINE int txfm_partition_context(const TXFM_CONTEXT *const above_ctx,
                                          const TXFM_CONTEXT *const left_ctx,
                                          BLOCK_SIZE bsize, TX_SIZE tx_size) {
@@ -1999,6 +2213,7 @@ static INLINE int txfm_partition_context(const TXFM_CONTEXT *const above_ctx,
   assert(category != TXFM_PARTITION_CONTEXTS);
   return category * 3 + above + left;
 }
+#endif  // CONFIG_NEW_TX_PARTITION
 
 // Compute the next partition in the direction of the sb_type stored in the mi
 // array, starting with bsize.

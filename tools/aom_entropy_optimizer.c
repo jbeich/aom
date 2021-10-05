@@ -396,6 +396,27 @@ int main(int argc, const char **argv) {
                      "default_switchable_interp_cdf[SWITCHABLE_FILTER_CONTEXTS]"
                      "[CDF_SIZE(SWITCHABLE_FILTERS)]");
 
+#if CONFIG_NEW_INTER_MODES
+  cts_each_dim[0] = INTER_SINGLE_MODE_CONTEXTS;
+  cts_each_dim[1] = INTER_SINGLE_MODES;
+  optimize_cdf_table(&fc.inter_single_mode[0][0], probsfile, 2, cts_each_dim,
+                     "static const aom_cdf_prob\n"
+                     "default_inter_single_mode_cdf"
+                     "[INTER_SINGLE_MODE_CONTEXTS][CDF_SIZE("
+                     "INTER_SINGLE_MODES)]");
+
+  cts_each_dim[0] = DRL_MODE_CONTEXTS;
+  cts_each_dim[1] = 2;
+  optimize_cdf_table(&fc.drl_mode[0][0][0], probsfile, 2, cts_each_dim,
+                     "static const aom_cdf_prob "
+                     "default_drl0_cdf[DRL_MODE_CONTEXTS][CDF_SIZE(2)]");
+  optimize_cdf_table(&fc.drl_mode[1][0][0], probsfile, 2, cts_each_dim,
+                     "static const aom_cdf_prob "
+                     "default_drl1_cdf[DRL_MODE_CONTEXTS][CDF_SIZE(2)]");
+  optimize_cdf_table(&fc.drl_mode[2][0][0], probsfile, 2, cts_each_dim,
+                     "static const aom_cdf_prob "
+                     "default_drl2_cdf[DRL_MODE_CONTEXTS][CDF_SIZE(2)]");
+#else
   /* Motion vector referencing */
   cts_each_dim[0] = NEWMV_MODE_CONTEXTS;
   cts_each_dim[1] = 2;
@@ -420,6 +441,7 @@ int main(int argc, const char **argv) {
   optimize_cdf_table(&fc.drl_mode[0][0], probsfile, 2, cts_each_dim,
                      "static const aom_cdf_prob "
                      "default_drl_cdf[DRL_MODE_CONTEXTS][CDF_SIZE(2)]");
+#endif  // CONFIG_NEW_INTER_MODES
 
   /* ext_inter experiment */
   /* New compound mode */
@@ -583,12 +605,14 @@ int main(int argc, const char **argv) {
       "[PALETTE_COLOR_INDEX_CONTEXTS][CDF_SIZE(PALETTE_COLORS)]");
 
   /* Transform size */
+#if !CONFIG_NEW_TX_PARTITION
   cts_each_dim[0] = TXFM_PARTITION_CONTEXTS;
   cts_each_dim[1] = 2;
   optimize_cdf_table(
       &fc.txfm_partition[0][0], probsfile, 2, cts_each_dim,
       "static const aom_cdf_prob\n"
       "default_txfm_partition_cdf[TXFM_PARTITION_CONTEXTS][CDF_SIZE(2)]");
+#endif  // !CONFIG_NEW_TX_PARTITION
 
   /* Skip flag */
   cts_each_dim[0] = SKIP_CONTEXTS;
@@ -653,6 +677,7 @@ int main(int argc, const char **argv) {
                      "[CDF_SIZE(2)]");
 
   /* intra tx size */
+#if !CONFIG_NEW_TX_PARTITION
   cts_each_dim[0] = MAX_TX_CATS;
   cts_each_dim[1] = TX_SIZE_CONTEXTS;
   cts_each_dim[2] = MAX_TX_DEPTH + 1;
@@ -662,6 +687,7 @@ int main(int argc, const char **argv) {
       intra_tx_sizes_each_ctx,
       "static const aom_cdf_prob default_tx_size_cdf"
       "[MAX_TX_CATS][TX_SIZE_CONTEXTS][CDF_SIZE(MAX_TX_DEPTH + 1)]");
+#endif  // !CONFIG_NEW_TX_PARTITION
 
   /* transform coding */
   cts_each_dim[0] = TOKEN_CDF_Q_CTXS;

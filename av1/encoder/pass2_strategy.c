@@ -1233,6 +1233,9 @@ static void calculate_gf_length(AV1_COMP *cpi, int max_gop_length,
   if (has_no_stats_stage(cpi)) {
     for (i = 0; i < MAX_NUM_GF_INTERVALS; i++) {
       rc->gf_intervals[i] = AOMMIN(rc->max_gf_interval, max_gop_length);
+      if (cpi->oxcf.gf_cfg.lag_in_frames >= MIN_GF_INTERVAL)
+        rc->gf_intervals[i] =
+            AOMMIN(rc->gf_intervals[i], cpi->oxcf.gf_cfg.lag_in_frames);
       // When there exists a single subgop in a kf-interval, correct the
       // gf_interval appropriately.
       if (rc->gf_intervals[i] >= rc->frames_to_key && is_keyframe_subgop)
@@ -1280,9 +1283,13 @@ static void calculate_gf_length(AV1_COMP *cpi, int max_gop_length,
       break;
     }
 
-    // reached maximum len, but nothing special yet (almost static)
-    // let's look at the next interval
-    if (i - cur_start >= rc->static_scene_max_gf_interval) {
+    if (i == (cpi->oxcf.gf_cfg.lag_in_frames - 1) &&
+        (cpi->oxcf.gf_cfg.lag_in_frames >= MIN_GF_INTERVAL)) {
+      // Enforce lag in frames
+      cut_here = 1;
+    } else if (i - cur_start >= rc->static_scene_max_gf_interval) {
+      // reached maximum len, but nothing special yet (almost static)
+      // let's look at the next interval
       cut_here = 1;
     } else {
       // reaches last frame, break
@@ -1480,7 +1487,9 @@ static void define_gf_group_pass0(AV1_COMP *cpi, FRAME_TYPE curr_frame_type) {
   rc->constrained_gf_group =
       (rc->baseline_gf_interval >= rc->frames_to_key) ? 1 : 0;
 
-  gf_group->max_layer_depth_allowed = oxcf->gf_cfg.gf_max_pyr_height;
+  // TODO(sarahparker): finish bit allocation for one pass pyramid.
+  gf_group->max_layer_depth_allowed =
+      AOMMIN(gf_cfg->gf_max_pyr_height, USE_ALTREF_FOR_ONE_PASS);
 
   // Rare case when the look-ahead is less than the target GOP length, can't
   // generate ARF frame.
@@ -1722,7 +1731,7 @@ static void define_gf_group(AV1_COMP *cpi, FIRSTPASS_STATS *this_frame,
     use_alt_ref =
         !is_almost_static(gf_stats.zero_motion_accumulator,
                           twopass->kf_zeromotion_pct, cpi->lap_enabled) &&
-        rc->use_arf_in_this_kf_group && (i < gf_cfg->lag_in_frames) &&
+        rc->use_arf_in_this_kf_group && (i <= gf_cfg->lag_in_frames) &&
         (i >= MIN_GF_INTERVAL);
 
     // TODO(urvang): Improve and use model for VBR, CQ etc as well.
@@ -1739,7 +1748,7 @@ static void define_gf_group(AV1_COMP *cpi, FIRSTPASS_STATS *this_frame,
     }
   } else {
     use_alt_ref =
-        rc->use_arf_in_this_kf_group && (i < gf_cfg->lag_in_frames) && (i > 2);
+        rc->use_arf_in_this_kf_group && (i <= gf_cfg->lag_in_frames) && (i > 2);
   }
 
 #define REDUCE_GF_LENGTH_THRESH 4

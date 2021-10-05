@@ -23,7 +23,6 @@
 #include "av1/encoder/rdopt.h"
 #include "av1/encoder/segmentation.h"
 #include "av1/encoder/superres_scale.h"
-#include "av1/encoder/var_based_part.h"
 
 #if CONFIG_TUNE_VMAF
 #include "av1/encoder/tune_vmaf.h"
@@ -353,7 +352,6 @@ void av1_apply_active_map(AV1_COMP *cpi) {
   }
 }
 
-#if !CONFIG_REALTIME_ONLY
 static void process_tpl_stats_frame(AV1_COMP *cpi) {
   const GF_GROUP *const gf_group = &cpi->gf_group;
   AV1_COMMON *const cm = &cpi->common;
@@ -415,7 +413,6 @@ static void process_tpl_stats_frame(AV1_COMP *cpi) {
     }
   }
 }
-#endif  // !CONFIG_REALTIME_ONLY
 
 void av1_set_size_dependent_vars(AV1_COMP *cpi, int *q, int *bottom_index,
                                  int *top_index) {
@@ -424,14 +421,12 @@ void av1_set_size_dependent_vars(AV1_COMP *cpi, int *q, int *bottom_index,
   // Setup variables that depend on the dimensions of the frame.
   av1_set_speed_features_framesize_dependent(cpi, cpi->speed);
 
-#if !CONFIG_REALTIME_ONLY
   GF_GROUP *gf_group = &cpi->gf_group;
   if (cpi->oxcf.algo_cfg.enable_tpl_model &&
       is_frame_tpl_eligible(gf_group, gf_group->index)) {
     process_tpl_stats_frame(cpi);
     av1_tpl_rdmult_setup(cpi);
   }
-#endif
 
   // Decide q and q bounds.
   *q = av1_rc_pick_q_and_bounds(cpi, &cpi->rc, cm->width, cm->height,
@@ -644,7 +639,6 @@ void av1_setup_frame(AV1_COMP *cpi) {
   cpi->vaq_refresh = 0;
 }
 
-#if !CONFIG_REALTIME_ONLY
 #if !CONFIG_REMOVE_DUAL_FILTER
 static int get_interp_filter_selected(const AV1_COMMON *const cm,
                                       MV_REFERENCE_FRAME ref,
@@ -773,8 +767,7 @@ void av1_determine_sc_tools_with_encoding(AV1_COMP *cpi, const int q_orig) {
   const int allow_intrabc_orig_decision = cm->features.allow_intrabc;
   const int is_screen_content_type_orig_decision = cpi->is_screen_content_type;
   // Turn off the encoding trial for forward key frame and superres.
-  if (cpi->sf.rt_sf.use_nonrd_pick_mode || oxcf->kf_cfg.fwd_kf_enabled ||
-      cpi->superres_mode != AOM_SUPERRES_NONE || oxcf->mode == REALTIME ||
+  if (oxcf->kf_cfg.fwd_kf_enabled || cpi->superres_mode != AOM_SUPERRES_NONE ||
       is_screen_content_type_orig_decision || !is_key_frame) {
     return;
   }
@@ -824,12 +817,12 @@ void av1_determine_sc_tools_with_encoding(AV1_COMP *cpi, const int q_orig) {
                       q_for_screen_content_quick_run,
                       q_cfg->enable_chroma_deltaq);
     av1_set_speed_features_qindex_dependent(cpi, oxcf->speed);
+#if !CONFIG_EXTQUANT
     if (q_cfg->deltaq_mode != NO_DELTA_Q || q_cfg->enable_chroma_deltaq)
-      av1_init_quantizer(&cpi->enc_quant_dequant_params, &cm->quant_params,
-                         cm->seq_params.bit_depth);
+#endif
+      av1_init_quantizer(&cm->seq_params, &cpi->enc_quant_dequant_params,
+                         &cm->quant_params);
 
-    av1_set_variance_partition_thresholds(cpi, q_for_screen_content_quick_run,
-                                          0);
     // transform / motion compensation build reconstruction frame
     av1_encode_frame(cpi);
     // Screen content decision
@@ -865,7 +858,6 @@ int av1_recode_loop_test_global_motion(WarpedMotionParams *const global_motion,
   }
   return recode;
 }
-#endif  // CONFIG_REALTIME_ONLY
 
 static void fix_interp_filter(InterpFilter *const interp_filter,
                               const FRAME_COUNTS *const counts) {

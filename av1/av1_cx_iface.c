@@ -58,7 +58,7 @@ struct av1_extracfg {
   const char *vmaf_model_path;
   const char *subgop_config_str;
   const char *subgop_config_path;
-  unsigned int qp;  // constant/constrained quality level
+  int qp;  // constant/constrained quality level
   unsigned int rc_max_intra_bitrate_pct;
   unsigned int rc_max_inter_bitrate_pct;
   unsigned int gf_cbr_boost_pct;
@@ -66,6 +66,9 @@ struct av1_extracfg {
   unsigned int enable_deblocking;
   unsigned int enable_cdef;
   unsigned int enable_restoration;
+#if CONFIG_CCSO
+  unsigned int enable_ccso;
+#endif
   unsigned int force_video_mode;
   unsigned int enable_obmc;
   unsigned int enable_trellis_quant;
@@ -106,15 +109,23 @@ struct av1_extracfg {
   const char *film_grain_table_filename;
   unsigned int motion_vector_unit_test;
   unsigned int cdf_update_mode;
+  int disable_ml_partition_speed_features;
   int enable_rect_partitions;  // enable rectangular partitions for sequence
   int enable_ab_partitions;    // enable AB partitions for sequence
   int enable_1to4_partitions;  // enable 1:4 and 4:1 partitions for sequence
+  int disable_ml_transform_speed_features;  // disable all ml transform speedups
 #if CONFIG_SDP
   int enable_sdp;  // enable semi-decoupled partitioning
 #endif             // CONFIG_SDP
-#if CONFIG_EXT_RECUR_PARTITIONS
-  int disable_ml_partition_speed_features;
-#endif                           // CONFIG_EXT_RECUR_PARTITIONS
+#if CONFIG_MRLS
+  int enable_mrls;  // enable multiple reference line selection
+#endif              // CONFIG_MRLS
+#if CONFIG_ORIP
+  int enable_orip;  // enable ORIP
+#endif              // CONFIG_ORIP
+#if CONFIG_IST
+  int enable_ist;                // enable intra secondary transform
+#endif                           // CONFIG_IST
   int min_partition_size;        // min partition size [4,8,16,32,64,128]
   int max_partition_size;        // max partition size [4,8,16,32,64,128]
   int enable_intra_edge_filter;  // enable intra-edge filter for sequence
@@ -172,6 +183,9 @@ struct av1_extracfg {
   unsigned int ext_tile_debug;
   unsigned int sb_multipass_unit_test;
   unsigned int enable_subgop_stats;
+#if CONFIG_NEW_INTER_MODES
+  unsigned int max_drl_refmvs;
+#endif  // CONFIG_NEW_INTER_MODES
 };
 
 // Example subgop configs. Currently not used by default.
@@ -273,7 +287,22 @@ const char subgop_config_str_ld[] =
     "9V2/10V5/11V4/12V5/13V3/14V5/15V4/16V5,"
 
     "16:1:1V1/2V5/3V4/4V5/5V3/6V5/7V4/8V5/"
-    "9V2/10V5/11V4/12V5/13V3/14V4/15V5/16V5";
+    "9V2/10V5/11V4/12V5/13V3/14V4/15V5/16V5,"
+
+    "32:2:1V6/2V5/3V6/4V4/5V6/6V5/7V6/8V3/"
+    "9V6/10V5/11V6/12V4/13V6/14V5/15V6/16V2/"
+    "17V6/18V5/19V6/20V4/21V6/22V5/23V6/24V3/"
+    "25V6/26V5/27V6/28V4/29V6/30V5/31V6/32V5,"
+
+    "32:0:1V1/2V6/3V5/4V6/5V4/6V6/7V5/8V6/"
+    "9V3/10V6/11V5/12V6/13V4/14V6/15V5/16V6/"
+    "17V2/18V6/19V5/20V6/21V4/22V6/23V5/24V6/"
+    "25V3/26V6/27V5/28V6/29V4/30V6/31V5/32V6,"
+
+    "32:1:1V1/2V6/3V5/4V6/5V4/6V6/7V5/8V6/"
+    "9V3/10V6/11V5/12V6/13V4/14V6/15V5/16V6/"
+    "17V2/18V6/19V5/20V6/21V4/22V6/23V5/24V6/"
+    "25V3/26V6/27V5/28V6/29V4/30V5/31V6/32V6,";
 
 typedef struct {
   const char *preset_tag;
@@ -316,17 +345,20 @@ static struct av1_extracfg default_extra_cfg = {
   1,                                         // enable_deblocking
   1,                                         // enable_cdef
   1,                                         // enable_restoration
-  0,                                         // force_video_mode
-  1,                                         // enable_obmc
-  3,                                         // enable_trellis_quant
-  0,                                         // enable_qm
-  DEFAULT_QM_Y,                              // qm_y
-  DEFAULT_QM_U,                              // qm_u
-  DEFAULT_QM_V,                              // qm_v
-  DEFAULT_QM_FIRST,                          // qm_min
-  DEFAULT_QM_LAST,                           // qm_max
-  1,                                         // max number of tile groups
-  0,                                         // mtu_size
+#if CONFIG_CCSO
+  1,  // enable_ccso
+#endif
+  0,                       // force_video_mode
+  1,                       // enable_obmc
+  3,                       // enable_trellis_quant
+  0,                       // enable_qm
+  DEFAULT_QM_Y,            // qm_y
+  DEFAULT_QM_U,            // qm_u
+  DEFAULT_QM_V,            // qm_v
+  DEFAULT_QM_FIRST,        // qm_min
+  DEFAULT_QM_LAST,         // qm_max
+  1,                       // max number of tile groups
+  0,                       // mtu_size
   AOM_TIMING_UNSPECIFIED,  // No picture timing signaling in bitstream
   0,                       // frame_parallel_decoding_mode
 #if !CONFIG_REMOVE_DUAL_FILTER
@@ -354,15 +386,27 @@ static struct av1_extracfg default_extra_cfg = {
   0,                            // film_grain_table_filename
   0,                            // motion_vector_unit_test
   1,                            // CDF update mode
-  1,                            // enable rectangular partitions
-  1,                            // enable ab shape partitions
-  1,                            // enable 1:4 and 4:1 partitions
+#if CONFIG_EXT_RECUR_PARTITIONS
+  1,  // disable ML based partition speed up features
+#else
+  0,  // disable ML based partition speed up features
+#endif
+  1,  // enable rectangular partitions
+  1,  // enable ab shape partitions
+  1,  // enable 1:4 and 4:1 partitions
+  0,  // disable ml based transform speed features
 #if CONFIG_SDP
   1,    // enable semi-decoupled partitioning
 #endif  // CONFIG_SDP
-#if CONFIG_EXT_RECUR_PARTITIONS
-  1,    // disable ML based partition speed up features
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
+#if CONFIG_MRLS
+  1,    // enable multiple reference line selection
+#endif  // CONFIG_MRLS
+#if CONFIG_ORIP
+  1,    // enable ORIP
+#endif  // CONFIG_ORIP
+#if CONFIG_IST
+  1,    // enable intra secondary transform
+#endif  // CONFIG_IST
   4,    // min_partition_size
   128,  // max_partition_size
   1,    // enable intra edge filter
@@ -424,6 +468,9 @@ static struct av1_extracfg default_extra_cfg = {
   0,            // ext_tile_debug
   0,            // sb_multipass_unit_test
   0,            // enable_subgop_stats
+#if CONFIG_NEW_INTER_MODES
+  0,    // max_drl_refmvs
+#endif  // CONFIG_NEW_INTER_MODES
 };
 
 struct aom_codec_alg_priv {
@@ -516,7 +563,19 @@ static aom_codec_err_t validate_config(aom_codec_alg_priv_t *ctx,
   RANGE_CHECK(cfg, g_timebase.num, 1, cfg->g_timebase.den);
   RANGE_CHECK_HI(cfg, g_profile, MAX_PROFILES - 1);
 
-  RANGE_CHECK_HI(cfg, rc_max_quantizer, 255);
+  RANGE_CHECK(cfg, g_bit_depth, AOM_BITS_8, AOM_BITS_12);
+  RANGE_CHECK(cfg, g_input_bit_depth, AOM_BITS_8, AOM_BITS_12);
+#if CONFIG_EXTQUANT
+  const int min_quantizer =
+      (-(int)(cfg->g_bit_depth - AOM_BITS_8) * MAXQ_OFFSET);
+  RANGE_CHECK(cfg, rc_max_quantizer, min_quantizer, 255);
+  RANGE_CHECK(cfg, rc_min_quantizer, min_quantizer, 255);
+  RANGE_CHECK(extra_cfg, qp, min_quantizer, 255);
+#else
+  RANGE_CHECK(cfg, rc_max_quantizer, 0, 255);
+  RANGE_CHECK(cfg, rc_min_quantizer, 0, 255);
+  RANGE_CHECK(extra_cfg, qp, 0, 255);
+#endif  // CONFIG_EXTQUANT
   RANGE_CHECK_HI(cfg, rc_min_quantizer, cfg->rc_max_quantizer);
   RANGE_CHECK_BOOL(extra_cfg, lossless);
   RANGE_CHECK_HI(extra_cfg, aq_mode, AQ_MODE_COUNT - 1);
@@ -587,9 +646,6 @@ static aom_codec_err_t validate_config(aom_codec_alg_priv_t *ctx,
   RANGE_CHECK_HI(extra_cfg, sharpness, 7);
   RANGE_CHECK_HI(extra_cfg, arnr_max_frames, 15);
   RANGE_CHECK_HI(extra_cfg, arnr_strength, 6);
-  RANGE_CHECK_HI(extra_cfg, qp, 255);
-  RANGE_CHECK(cfg, g_bit_depth, AOM_BITS_8, AOM_BITS_12);
-  RANGE_CHECK(cfg, g_input_bit_depth, 8, 12);
   RANGE_CHECK(extra_cfg, content, AOM_CONTENT_DEFAULT, AOM_CONTENT_INVALID - 1);
 
   if (cfg->g_profile <= (unsigned int)PROFILE_1 &&
@@ -602,7 +658,11 @@ static aom_codec_err_t validate_config(aom_codec_alg_priv_t *ctx,
   }
 
   if (cfg->rc_end_usage == AOM_Q) {
+#if CONFIG_QBASED_QP_OFFSET
+    RANGE_CHECK_HI(cfg, use_fixed_qp_offsets, 2);
+#else
     RANGE_CHECK_HI(cfg, use_fixed_qp_offsets, 1);
+#endif  // CONFIG_QBASED_QP_OFFSET
     for (int i = 0; i < FIXED_QP_OFFSET_COUNT; ++i) {
       RANGE_CHECK_HI(cfg, fixed_qp_offsets[i], 255);
     }
@@ -683,7 +743,14 @@ static aom_codec_err_t validate_config(aom_codec_alg_priv_t *ctx,
   RANGE_CHECK(extra_cfg, mv_cost_upd_freq, 0, 3);
 
   RANGE_CHECK(extra_cfg, min_partition_size, 4, 128);
-  RANGE_CHECK(extra_cfg, max_partition_size, 4, 128);
+#if CONFIG_SDP
+  // when sdp is enabled, the maximum partition size must be equal to or greater
+  // than 8x8
+  if (extra_cfg->enable_sdp)
+    RANGE_CHECK(extra_cfg, max_partition_size, 8, 128);
+  else
+#endif
+    RANGE_CHECK(extra_cfg, max_partition_size, 4, 128);
   RANGE_CHECK_HI(extra_cfg, min_partition_size, extra_cfg->max_partition_size);
 
   for (int i = 0; i < MAX_NUM_OPERATING_POINTS; ++i) {
@@ -758,6 +825,9 @@ static void update_encoder_config(cfg_options_t *cfg,
   cfg->enable_deblocking = extra_cfg->enable_deblocking;
   cfg->enable_cdef = extra_cfg->enable_cdef;
   cfg->enable_restoration = extra_cfg->enable_restoration;
+#if CONFIG_CCSO
+  cfg->enable_ccso = extra_cfg->enable_ccso;
+#endif
   cfg->superblock_size =
       (extra_cfg->superblock_size == AOM_SUPERBLOCK_SIZE_64X64)
           ? 64
@@ -772,16 +842,25 @@ static void update_encoder_config(cfg_options_t *cfg,
   cfg->enable_dual_filter = extra_cfg->enable_dual_filter;
 #endif  // !CONFIG_REMOVE_DUAL_FILTER
   cfg->enable_angle_delta = extra_cfg->enable_angle_delta;
+  cfg->disable_ml_partition_speed_features =
+      extra_cfg->disable_ml_partition_speed_features;
   cfg->enable_rect_partitions = extra_cfg->enable_rect_partitions;
   cfg->enable_ab_partitions = extra_cfg->enable_ab_partitions;
   cfg->enable_1to4_partitions = extra_cfg->enable_1to4_partitions;
+  cfg->disable_ml_transform_speed_features =
+      extra_cfg->disable_ml_transform_speed_features;
 #if CONFIG_SDP
   cfg->enable_sdp = extra_cfg->enable_sdp;
 #endif
-#if CONFIG_EXT_RECUR_PARTITIONS
-  cfg->disable_ml_partition_speed_features =
-      extra_cfg->disable_ml_partition_speed_features;
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
+#if CONFIG_MRLS
+  cfg->enable_mrls = extra_cfg->enable_mrls;
+#endif
+#if CONFIG_ORIP
+  cfg->enable_orip = extra_cfg->enable_orip;
+#endif
+#if CONFIG_IST
+  cfg->enable_ist = extra_cfg->enable_ist;
+#endif
   cfg->max_partition_size = extra_cfg->max_partition_size;
   cfg->min_partition_size = extra_cfg->min_partition_size;
   cfg->enable_intra_edge_filter = extra_cfg->enable_intra_edge_filter;
@@ -806,6 +885,9 @@ static void update_encoder_config(cfg_options_t *cfg,
   cfg->enable_onesided_comp = extra_cfg->enable_onesided_comp;
   cfg->enable_reduced_reference_set = extra_cfg->enable_reduced_reference_set;
   cfg->reduced_tx_type_set = extra_cfg->reduced_tx_type_set;
+#if CONFIG_NEW_INTER_MODES
+  cfg->max_drl_refmvs = extra_cfg->max_drl_refmvs;
+#endif  // CONFIG_NEW_INTER_MODES
 }
 
 static void update_default_encoder_config(const cfg_options_t *cfg,
@@ -813,6 +895,9 @@ static void update_default_encoder_config(const cfg_options_t *cfg,
   extra_cfg->enable_deblocking = cfg->enable_deblocking;
   extra_cfg->enable_cdef = cfg->enable_cdef;
   extra_cfg->enable_restoration = cfg->enable_restoration;
+#if CONFIG_CCSO
+  extra_cfg->enable_ccso = cfg->enable_ccso;
+#endif
   extra_cfg->superblock_size = (cfg->superblock_size == 64)
                                    ? AOM_SUPERBLOCK_SIZE_64X64
                                    : (cfg->superblock_size == 128)
@@ -830,13 +915,22 @@ static void update_default_encoder_config(const cfg_options_t *cfg,
   extra_cfg->enable_rect_partitions = cfg->enable_rect_partitions;
   extra_cfg->enable_ab_partitions = cfg->enable_ab_partitions;
   extra_cfg->enable_1to4_partitions = cfg->enable_1to4_partitions;
+  extra_cfg->disable_ml_transform_speed_features =
+      cfg->disable_ml_transform_speed_features;
+  extra_cfg->disable_ml_partition_speed_features =
+      cfg->disable_ml_partition_speed_features;
 #if CONFIG_SDP
   extra_cfg->enable_sdp = cfg->enable_sdp;
 #endif
-#if CONFIG_EXT_RECUR_PARTITIONS
-  extra_cfg->disable_ml_partition_speed_features =
-      cfg->disable_ml_partition_speed_features;
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
+#if CONFIG_MRLS
+  extra_cfg->enable_mrls = cfg->enable_mrls;
+#endif
+#if CONFIG_ORIP
+  extra_cfg->enable_orip = cfg->enable_orip;
+#endif
+#if CONFIG_IST
+  extra_cfg->enable_ist = cfg->enable_ist;
+#endif
   extra_cfg->max_partition_size = cfg->max_partition_size;
   extra_cfg->min_partition_size = cfg->min_partition_size;
   extra_cfg->enable_intra_edge_filter = cfg->enable_intra_edge_filter;
@@ -860,6 +954,9 @@ static void update_default_encoder_config(const cfg_options_t *cfg,
   extra_cfg->enable_onesided_comp = cfg->enable_onesided_comp;
   extra_cfg->enable_reduced_reference_set = cfg->enable_reduced_reference_set;
   extra_cfg->reduced_tx_type_set = cfg->reduced_tx_type_set;
+#if CONFIG_NEW_INTER_MODES
+  extra_cfg->max_drl_refmvs = cfg->max_drl_refmvs;
+#endif  // CONFIG_NEW_INTER_MODES
 }
 
 static double convert_qp_offset(int qp, int qp_offset, int bit_depth) {
@@ -869,13 +966,49 @@ static double convert_qp_offset(int qp, int qp_offset, int bit_depth) {
   return (base_q_val - new_q_val);
 }
 
+#if CONFIG_QBASED_QP_OFFSET
+static double get_modeled_qp_offset(int qp, int level, int bit_depth,
+                                    int q_based_qp_offsets) {
+#else
 static double get_modeled_qp_offset(int qp, int level, int bit_depth) {
-  // 80% for keyframe was derived empirically.
-  // 40% similar to rc_pick_q_and_bounds_one_pass_vbr() for Q mode ARF.
+#endif  // CONFIG_QBASED_QP_OFFSET
+  // 76% for keyframe was derived empirically.
+  // 60% similar to rc_pick_q_and_bounds_one_pass_vbr() for Q mode ARF.
   // Rest derived similar to rc_pick_q_and_bounds_two_pass()
-  static const int percents[FIXED_QP_OFFSET_COUNT] = { 76, 60, 30, 15, 8 };
+  static const int percents[FIXED_QP_OFFSET_COUNT] = { 76, 60, 30, 15, 8, 4 };
   const double q_val = av1_convert_qindex_to_q(qp, bit_depth);
+
+#if CONFIG_QBASED_QP_OFFSET
+  double factor = percents[level];
+  if (q_based_qp_offsets) {
+    // At higher end of QP the slope of quant step-size grows exponentially,
+    // captured by qp_threshold.
+#if CONFIG_EXTQUANT
+    const int max_q = (bit_depth == AOM_BITS_8)
+                          ? MAXQ_8_BITS
+                          : (bit_depth == AOM_BITS_10) ? MAXQ_10_BITS : MAXQ;
+#else
+    const int max_q = MAXQ;
+#endif  // CONFIG_EXTQUANT
+
+    const int qp_threshold = (max_q * 7) / 10;
+    if (qp < qp_threshold) {
+      factor = AOMMIN((cbrt(q_val * 4) / 8) * 100, 76);
+      if (level == 1) {
+        factor = (factor * 7) / 8;
+      } else if (level == 2) {
+        factor = factor / 2;
+      } else if (level == 3) {
+        factor = factor / 4;
+      } else if (level == 4) {
+        factor = factor / 8;
+      }
+    }
+  }
+  return q_val * factor / 100;
+#else
   return q_val * percents[level] / 100;
+#endif  // CONFIG_QBASED_QP_OFFSET
 }
 
 // update_config parameter is used to indicate whether extra command line
@@ -929,7 +1062,7 @@ static aom_codec_err_t set_encoder_config(AV1EncoderConfig *oxcf,
   const int is_vbr = cfg->rc_end_usage == AOM_VBR;
   oxcf->profile = cfg->g_profile;
   oxcf->max_threads = (int)cfg->g_threads;
-  oxcf->mode = (cfg->g_usage == AOM_USAGE_REALTIME) ? REALTIME : GOOD;
+  oxcf->mode = GOOD;
 
   // Set frame-dimension related configuration.
   frm_dim_cfg->width = cfg->g_w;
@@ -993,9 +1126,19 @@ static aom_codec_err_t set_encoder_config(AV1EncoderConfig *oxcf,
   rc_cfg->gf_cbr_boost_pct = extra_cfg->gf_cbr_boost_pct;
   rc_cfg->mode = cfg->rc_end_usage;
   rc_cfg->min_cr = extra_cfg->min_cr;
+
+#if CONFIG_EXTQUANT
+  const int offset_qp = (cfg->g_bit_depth - AOM_BITS_8) * MAXQ_OFFSET;
+  rc_cfg->best_allowed_q =
+      extra_cfg->lossless ? 0 : cfg->rc_min_quantizer + offset_qp;
+  rc_cfg->worst_allowed_q =
+      extra_cfg->lossless ? 0 : cfg->rc_max_quantizer + offset_qp;
+  rc_cfg->qp = extra_cfg->qp + offset_qp;
+#else
   rc_cfg->best_allowed_q = extra_cfg->lossless ? 0 : cfg->rc_min_quantizer;
   rc_cfg->worst_allowed_q = extra_cfg->lossless ? 0 : cfg->rc_max_quantizer;
   rc_cfg->qp = extra_cfg->qp;
+#endif
 
   rc_cfg->under_shoot_pct = cfg->rc_undershoot_pct;
   rc_cfg->over_shoot_pct = cfg->rc_overshoot_pct;
@@ -1013,8 +1156,10 @@ static aom_codec_err_t set_encoder_config(AV1EncoderConfig *oxcf,
   tool_cfg->bit_depth = cfg->g_bit_depth;
   tool_cfg->enable_deblocking = extra_cfg->enable_deblocking;
   tool_cfg->enable_cdef = extra_cfg->enable_cdef;
-  tool_cfg->enable_restoration =
-      (cfg->g_usage == AOM_USAGE_REALTIME) ? 0 : extra_cfg->enable_restoration;
+  tool_cfg->enable_restoration = extra_cfg->enable_restoration;
+#if CONFIG_CCSO
+  tool_cfg->enable_ccso = extra_cfg->enable_ccso;
+#endif
   tool_cfg->force_video_mode = extra_cfg->force_video_mode;
   tool_cfg->enable_palette = extra_cfg->enable_palette;
   // FIXME(debargha): Should this be:
@@ -1038,6 +1183,9 @@ static aom_codec_err_t set_encoder_config(AV1EncoderConfig *oxcf,
       cfg->g_error_resilient | extra_cfg->error_resilient_mode;
   tool_cfg->frame_parallel_decoding_mode =
       extra_cfg->frame_parallel_decoding_mode;
+#if CONFIG_NEW_INTER_MODES
+  tool_cfg->max_drl_refmvs = extra_cfg->max_drl_refmvs;
+#endif  // CONFIG_NEW_INTER_MODES
 
   // Set Quantization related configuration.
   q_cfg->using_qm = extra_cfg->enable_qm;
@@ -1049,14 +1197,23 @@ static aom_codec_err_t set_encoder_config(AV1EncoderConfig *oxcf,
   q_cfg->deltaq_mode = extra_cfg->deltaq_mode;
   q_cfg->use_fixed_qp_offsets =
       cfg->use_fixed_qp_offsets && (rc_cfg->mode == AOM_Q);
+#if CONFIG_QBASED_QP_OFFSET
+  q_cfg->q_based_qp_offsets = (q_cfg->use_fixed_qp_offsets == 2) ? 1 : 0;
+#endif  // CONFIG_QBASED_QP_OFFSET
+
   for (int i = 0; i < FIXED_QP_OFFSET_COUNT; ++i) {
     if (q_cfg->use_fixed_qp_offsets) {
       if (cfg->fixed_qp_offsets[i] >= 0) {  // user-provided qp offset
         q_cfg->fixed_qp_offsets[i] = convert_qp_offset(
             rc_cfg->qp, cfg->fixed_qp_offsets[i], tool_cfg->bit_depth);
       } else {  // auto-selected qp offset
+#if CONFIG_QBASED_QP_OFFSET
+        q_cfg->fixed_qp_offsets[i] = get_modeled_qp_offset(
+            rc_cfg->qp, i, tool_cfg->bit_depth, q_cfg->q_based_qp_offsets);
+#else
         q_cfg->fixed_qp_offsets[i] =
             get_modeled_qp_offset(rc_cfg->qp, i, tool_cfg->bit_depth);
+#endif  // CONFIG_QBASED_QP_OFFSET
       }
     } else {
       q_cfg->fixed_qp_offsets[i] = -1.0;
@@ -1200,11 +1357,11 @@ static aom_codec_err_t set_encoder_config(AV1EncoderConfig *oxcf,
   oxcf->motion_mode_cfg.enable_obmc = extra_cfg->enable_obmc;
   oxcf->motion_mode_cfg.enable_warped_motion = extra_cfg->enable_warped_motion;
   oxcf->motion_mode_cfg.allow_warped_motion =
-      (cfg->g_usage == AOM_USAGE_REALTIME)
-          ? false
-          : (extra_cfg->allow_warped_motion & extra_cfg->enable_warped_motion);
+      (extra_cfg->allow_warped_motion & extra_cfg->enable_warped_motion);
 
   // Set partition related configuration.
+  part_cfg->disable_ml_partition_speed_features =
+      extra_cfg->disable_ml_partition_speed_features;
   part_cfg->enable_rect_partitions = extra_cfg->enable_rect_partitions;
   part_cfg->enable_ab_partitions = extra_cfg->enable_ab_partitions;
   part_cfg->enable_1to4_partitions = extra_cfg->enable_1to4_partitions;
@@ -1226,6 +1383,12 @@ static aom_codec_err_t set_encoder_config(AV1EncoderConfig *oxcf,
   intra_mode_cfg->enable_smooth_intra = extra_cfg->enable_smooth_intra;
   intra_mode_cfg->enable_paeth_intra = extra_cfg->enable_paeth_intra;
   intra_mode_cfg->enable_cfl_intra = extra_cfg->enable_cfl_intra;
+#if CONFIG_MRLS
+  intra_mode_cfg->enable_mrls = extra_cfg->enable_mrls;
+#endif
+#if CONFIG_ORIP
+  intra_mode_cfg->enable_orip = extra_cfg->enable_orip;
+#endif
 
   // Set transform size/type configuration.
   txfm_cfg->enable_tx64 = extra_cfg->enable_tx64;
@@ -1234,6 +1397,11 @@ static aom_codec_err_t set_encoder_config(AV1EncoderConfig *oxcf,
   txfm_cfg->use_intra_dct_only = extra_cfg->use_intra_dct_only;
   txfm_cfg->use_inter_dct_only = extra_cfg->use_inter_dct_only;
   txfm_cfg->use_intra_default_tx_only = extra_cfg->use_intra_default_tx_only;
+  txfm_cfg->disable_ml_transform_speed_features =
+      extra_cfg->disable_ml_transform_speed_features;
+#if CONFIG_IST
+  txfm_cfg->enable_ist = extra_cfg->enable_ist;
+#endif
 
   // Set compound type configuration.
 #if !CONFIG_REMOVE_DIST_WTD_COMP
@@ -1261,6 +1429,34 @@ static aom_codec_err_t set_encoder_config(AV1EncoderConfig *oxcf,
         (uint8_t)cfg->rc_superres_kf_denominator;
     superres_cfg->superres_qthresh = cfg->rc_superres_qthresh;
     superres_cfg->superres_kf_qthresh = cfg->rc_superres_kf_qthresh;
+#if CONFIG_EXTQUANT
+    int offset_superres_qthresh;
+    int offset_superres_kf_qthresh;
+    switch (cfg->g_bit_depth) {
+      case AOM_BITS_8:
+        offset_superres_qthresh = 0;
+        offset_superres_kf_qthresh = 0;
+        break;
+      case AOM_BITS_10:
+        offset_superres_qthresh =
+            qindex_10b_offset[superres_cfg->superres_qthresh != 0];
+        offset_superres_kf_qthresh =
+            qindex_10b_offset[superres_cfg->superres_kf_qthresh != 0];
+        break;
+      case AOM_BITS_12:
+        offset_superres_qthresh =
+            qindex_12b_offset[superres_cfg->superres_qthresh != 0];
+        offset_superres_kf_qthresh =
+            qindex_12b_offset[superres_cfg->superres_kf_qthresh != 0];
+        break;
+      default:
+        offset_superres_qthresh = 0;
+        offset_superres_kf_qthresh = 0;
+        break;
+    }
+    superres_cfg->superres_qthresh += offset_superres_qthresh;
+    superres_cfg->superres_kf_qthresh += offset_superres_kf_qthresh;
+#endif
     if (superres_cfg->superres_mode == AOM_SUPERRES_FIXED &&
         superres_cfg->superres_scale_denominator == SCALE_NUMERATOR &&
         superres_cfg->superres_kf_scale_denominator == SCALE_NUMERATOR) {
@@ -2214,7 +2410,6 @@ static aom_codec_err_t ctrl_enable_subgop_stats(aom_codec_alg_priv_t *ctx,
   return AOM_CODEC_OK;
 }
 
-#if !CONFIG_REALTIME_ONLY
 static aom_codec_err_t create_stats_buffer(FIRSTPASS_STATS **frame_stats_buffer,
                                            STATS_BUFFER_CTX *stats_buf_context,
                                            int num_lap_buffers) {
@@ -2238,7 +2433,6 @@ static aom_codec_err_t create_stats_buffer(FIRSTPASS_STATS **frame_stats_buffer,
   av1_twopass_zero_stats(stats_buf_context->total_stats);
   return res;
 }
-#endif
 
 static aom_codec_err_t create_context_and_bufferpool(
     AV1_COMP **p_cpi, BufferPool **p_buffer_pool, AV1EncoderConfig *oxcf,
@@ -2311,11 +2505,9 @@ static aom_codec_err_t encoder_init(aom_codec_ctx_t *ctx) {
       priv->oxcf.use_highbitdepth =
           (ctx->init_flags & AOM_CODEC_USE_HIGHBITDEPTH) ? 1 : 0;
 
-#if !CONFIG_REALTIME_ONLY
       res = create_stats_buffer(&priv->frame_stats_buffer,
                                 &priv->stats_buf_context, *num_lap_buffers);
       if (res != AOM_CODEC_OK) return AOM_CODEC_MEM_ERROR;
-#endif
 
       res = create_context_and_bufferpool(
           &priv->cpi, &priv->buffer_pool, &priv->oxcf, &priv->pkt_list.head,
@@ -2497,7 +2689,7 @@ static aom_codec_err_t encoder_encode(aom_codec_alg_priv_t *ctx,
       }
     }
   }
-  if (ctx->oxcf.mode != GOOD && ctx->oxcf.mode != REALTIME) {
+  if (ctx->oxcf.mode != GOOD) {
     ctx->oxcf.mode = GOOD;
     av1_change_config(ctx->cpi, &ctx->oxcf);
   }
@@ -3250,6 +3442,11 @@ static aom_codec_err_t encoder_set_option(aom_codec_alg_priv_t *ctx,
   } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.enable_restoration,
                               argv, err_string)) {
     extra_cfg.enable_restoration = arg_parse_uint_helper(&arg, err_string);
+#if CONFIG_CCSO
+  } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.enable_ccso, argv,
+                              err_string)) {
+    extra_cfg.enable_ccso = arg_parse_int_helper(&arg, err_string);
+#endif
   } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.force_video_mode,
                               argv, err_string)) {
     extra_cfg.force_video_mode = arg_parse_uint_helper(&arg, err_string);
@@ -3350,19 +3547,38 @@ static aom_codec_err_t encoder_set_option(aom_codec_alg_priv_t *ctx,
                               &g_av1_codec_arg_defs.enable_1to4_partitions,
                               argv, err_string)) {
     extra_cfg.enable_1to4_partitions = arg_parse_int_helper(&arg, err_string);
-#if CONFIG_SDP
-  } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.enable_sdp, argv,
-                              err_string)) {
-    extra_cfg.enable_sdp = arg_parse_int_helper(&arg, err_string);
-#endif
-#if CONFIG_EXT_RECUR_PARTITIONS
   } else if (arg_match_helper(
                  &arg,
                  &g_av1_codec_arg_defs.disable_ml_partition_speed_features,
                  argv, err_string)) {
     extra_cfg.disable_ml_partition_speed_features =
         arg_parse_int_helper(&arg, err_string);
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
+  } else if (arg_match_helper(
+                 &arg,
+                 &g_av1_codec_arg_defs.disable_ml_transform_speed_features,
+                 argv, err_string)) {
+    extra_cfg.disable_ml_transform_speed_features =
+        arg_parse_int_helper(&arg, err_string);
+#if CONFIG_SDP
+  } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.enable_sdp, argv,
+                              err_string)) {
+    extra_cfg.enable_sdp = arg_parse_int_helper(&arg, err_string);
+#endif
+#if CONFIG_MRLS
+  } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.enable_mrls, argv,
+                              err_string)) {
+    extra_cfg.enable_mrls = arg_parse_int_helper(&arg, err_string);
+#endif
+#if CONFIG_ORIP
+  } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.enable_orip, argv,
+                              err_string)) {
+    extra_cfg.enable_orip = arg_parse_int_helper(&arg, err_string);
+#endif
+#if CONFIG_IST
+  } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.enable_ist, argv,
+                              err_string)) {
+    extra_cfg.enable_ist = arg_parse_int_helper(&arg, err_string);
+#endif
   } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.min_partition_size,
                               argv, err_string)) {
     extra_cfg.min_partition_size = arg_parse_int_helper(&arg, err_string);
@@ -3518,6 +3734,13 @@ static aom_codec_err_t encoder_set_option(aom_codec_alg_priv_t *ctx,
                               &g_av1_codec_arg_defs.input_chroma_subsampling_y,
                               argv, err_string)) {
     extra_cfg.chroma_subsampling_y = arg_parse_uint_helper(&arg, err_string);
+#if CONFIG_NEW_INTER_MODES
+  } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.max_drl_refmvs, argv,
+                              err_string)) {
+    printf("haha\n");
+    extra_cfg.max_drl_refmvs = arg_parse_uint_helper(&arg, err_string);
+    printf("gaga %d\n", extra_cfg.max_drl_refmvs);
+#endif  // CONFIG_NEW_INTER_MODES
   } else {
     match = 0;
     snprintf(err_string, ARG_ERR_MSG_MAX_LEN, "Cannot find aom option %s",
@@ -3692,174 +3915,112 @@ static aom_codec_ctrl_fn_map_t encoder_ctrl_maps[] = {
   { AV1E_GET_SUB_GOP_CONFIG, ctrl_get_enc_sub_gop_config },
   { AV1E_GET_FRAME_TYPE, ctrl_get_frame_type },
   { AV1E_GET_FRAME_INFO, ctrl_get_enc_frame_info },
-
   CTRL_MAP_END,
 };
 
-static const aom_codec_enc_cfg_t encoder_usage_cfg[] = {
-  {
-      // NOLINT
-      AOM_USAGE_GOOD_QUALITY,  // g_usage - non-realtime usage
-      0,                       // g_threads
-      0,                       // g_profile
+static const aom_codec_enc_cfg_t encoder_usage_cfg[] = { {
+    // NOLINT
+    AOM_USAGE_GOOD_QUALITY,  // g_usage - non-realtime usage
+    0,                       // g_threads
+    0,                       // g_profile
 
-      320,         // g_w
-      240,         // g_h
-      0,           // g_limit
-      0,           // g_forced_max_frame_width
-      0,           // g_forced_max_frame_height
-      AOM_BITS_8,  // g_bit_depth
-      8,           // g_input_bit_depth
+    320,         // g_w
+    240,         // g_h
+    0,           // g_limit
+    0,           // g_forced_max_frame_width
+    0,           // g_forced_max_frame_height
+    AOM_BITS_8,  // g_bit_depth
+    8,           // g_input_bit_depth
 
-      { 1, 30 },  // g_timebase
+    { 1, 30 },  // g_timebase
 
-      0,  // g_error_resilient
+    0,  // g_error_resilient
 
-      AOM_RC_ONE_PASS,  // g_pass
+    AOM_RC_ONE_PASS,  // g_pass
 
-      19,  // g_lag_in_frames
+    19,  // g_lag_in_frames
 
-      0,                // rc_dropframe_thresh
-      RESIZE_NONE,      // rc_resize_mode
-      SCALE_NUMERATOR,  // rc_resize_denominator
-      SCALE_NUMERATOR,  // rc_resize_kf_denominator
+    0,                // rc_dropframe_thresh
+    RESIZE_NONE,      // rc_resize_mode
+    SCALE_NUMERATOR,  // rc_resize_denominator
+    SCALE_NUMERATOR,  // rc_resize_kf_denominator
 
-      AOM_SUPERRES_NONE,  // rc_superres_mode
-      SCALE_NUMERATOR,    // rc_superres_denominator
-      SCALE_NUMERATOR,    // rc_superres_kf_denominator
-      255,                // rc_superres_qthresh
-      128,                // rc_superres_kf_qthresh
+    AOM_SUPERRES_NONE,  // rc_superres_mode
+    SCALE_NUMERATOR,    // rc_superres_denominator
+    SCALE_NUMERATOR,    // rc_superres_kf_denominator
+    255,                // rc_superres_qthresh
+    128,                // rc_superres_kf_qthresh
 
-      AOM_VBR,      // rc_end_usage
-      { NULL, 0 },  // rc_firstpass_mb_stats_in
-      256,          // rc_target_bandwidth
-      0,            // rc_min_quantizer
-      255,          // rc_max_quantizer
-      25,           // rc_undershoot_pct
-      25,           // rc_overshoot_pct
+    AOM_VBR,      // rc_end_usage
+    { NULL, 0 },  // rc_firstpass_mb_stats_in
+    256,          // rc_target_bandwidth
+    0,            // rc_min_quantizer
+    255,          // rc_max_quantizer
+    25,           // rc_undershoot_pct
+    25,           // rc_overshoot_pct
 
-      6000,  // rc_max_buffer_size
-      4000,  // rc_buffer_initial_size
-      5000,  // rc_buffer_optimal_size
+    6000,  // rc_max_buffer_size
+    4000,  // rc_buffer_initial_size
+    5000,  // rc_buffer_optimal_size
 
-      0,     // rc_two_pass_vbrmin_section
-      2000,  // rc_two_pass_vbrmax_section
+    0,     // rc_two_pass_vbrmin_section
+    2000,  // rc_two_pass_vbrmax_section
 
-      // keyframing settings (kf)
-      0,                       // fwd_kf_enabled
-      AOM_KF_AUTO,             // kf_mode
-      0,                       // kf_min_dist
-      9999,                    // kf_max_dist
-      0,                       // sframe_dist
-      1,                       // sframe_mode
-      0,                       // large_scale_tile
-      0,                       // monochrome
-      0,                       // full_still_picture_hdr
-      0,                       // save_as_annexb
-      0,                       // tile_width_count
-      0,                       // tile_height_count
-      { 0 },                   // tile_widths
-      { 0 },                   // tile_heights
-      0,                       // use_fixed_qp_offsets
-      { -1, -1, -1, -1, -1 },  // fixed_qp_offsets
-      { 0, 128, 128, 4, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-#if CONFIG_SDP
-        1,  // enable_sdp
-#endif
+    // keyframing settings (kf)
+    0,                           // fwd_kf_enabled
+    AOM_KF_AUTO,                 // kf_mode
+    0,                           // kf_min_dist
+    9999,                        // kf_max_dist
+    0,                           // sframe_dist
+    1,                           // sframe_mode
+    0,                           // large_scale_tile
+    0,                           // monochrome
+    0,                           // full_still_picture_hdr
+    0,                           // save_as_annexb
+    0,                           // tile_width_count
+    0,                           // tile_height_count
+    { 0 },                       // tile_widths
+    { 0 },                       // tile_heights
+    0,                           // use_fixed_qp_offsets
+    { -1, -1, -1, -1, -1, -1 },  // fixed_qp_offsets
+    {
+        0, 128, 128, 4, 1, 1, 1,
 #if CONFIG_EXT_RECUR_PARTITIONS
-        1,  // disable_ml_partition_speed_features
-#endif      // CONFIG_EXT_RECUR_PARTITIONS
+        1,
+#else   // CONFIG_EXT_RECUR_PARTITIONS
+        0,
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
+        0,
+#if CONFIG_SDP
+        1,
+#endif  // CONFIG_SDP
+#if CONFIG_MRLS
+        1,
+#endif
+#if CONFIG_ORIP
+        1,
+#endif
+#if CONFIG_IST
+        1,
+#endif  // CONFIG_IST
+        1, 1,   1,   1,
+#if CONFIG_CCSO
+        1,
+#endif
+        1, 1,   1,
 #if !CONFIG_REMOVE_DIST_WTD_COMP
         1,
 #endif  // !CONFIG_REMOVE_DIST_WTD_COMP
         1, 1,   1,   0, 0, 1, 1, 1, 1,
 #if !CONFIG_REMOVE_DUAL_FILTER
         1,
-#endif                                          // !CONFIG_REMOVE_DUAL_FILTER
-        1, 1,   1,   1, 1, 1, 1, 3, 1, 1, 0 },  // cfg
-  },
-  {
-      // NOLINT
-      AOM_USAGE_REALTIME,  // g_usage - real-time usage
-      0,                   // g_threads
-      0,                   // g_profile
-
-      320,         // g_w
-      240,         // g_h
-      0,           // g_limit
-      0,           // g_forced_max_frame_width
-      0,           // g_forced_max_frame_height
-      AOM_BITS_8,  // g_bit_depth
-      8,           // g_input_bit_depth
-
-      { 1, 30 },  // g_timebase
-
-      0,  // g_error_resilient
-
-      AOM_RC_ONE_PASS,  // g_pass
-
-      1,  // g_lag_in_frames
-
-      0,                // rc_dropframe_thresh
-      RESIZE_NONE,      // rc_resize_mode
-      SCALE_NUMERATOR,  // rc_resize_denominator
-      SCALE_NUMERATOR,  // rc_resize_kf_denominator
-
-      AOM_SUPERRES_NONE,  // rc_superres_mode
-      SCALE_NUMERATOR,    // rc_superres_denominator
-      SCALE_NUMERATOR,    // rc_superres_kf_denominator
-      255,                // rc_superres_qthresh
-      128,                // rc_superres_kf_qthresh
-
-      AOM_CBR,      // rc_end_usage
-      { NULL, 0 },  // rc_firstpass_mb_stats_in
-      256,          // rc_target_bandwidth
-      0,            // rc_min_quantizer
-      255,          // rc_max_quantizer
-      25,           // rc_undershoot_pct
-      25,           // rc_overshoot_pct
-
-      6000,  // rc_max_buffer_size
-      4000,  // rc_buffer_initial_size
-      5000,  // rc_buffer_optimal_size
-
-      0,     // rc_two_pass_vbrmin_section
-      2000,  // rc_two_pass_vbrmax_section
-
-      // keyframing settings (kf)
-      0,                       // fwd_kf_enabled
-      AOM_KF_AUTO,             // kf_mode
-      0,                       // kf_min_dist
-      9999,                    // kf_max_dist
-      0,                       // sframe_dist
-      1,                       // sframe_mode
-      0,                       // large_scale_tile
-      0,                       // monochrome
-      0,                       // full_still_picture_hdr
-      0,                       // save_as_annexb
-      0,                       // tile_width_count
-      0,                       // tile_height_count
-      { 0 },                   // tile_widths
-      { 0 },                   // tile_heights
-      0,                       // use_fixed_qp_offsets
-      { -1, -1, -1, -1, -1 },  // fixed_qp_offsets
-      { 0, 128, 128, 4, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-#if CONFIG_SDP
-        1,  // enable_sdp
-#endif
-#if CONFIG_EXT_RECUR_PARTITIONS
-        1,  // disable_ml_partition_speed_features
-#endif      // CONFIG_EXT_RECUR_PARTITIONS
-#if !CONFIG_REMOVE_DIST_WTD_COMP
-        1,
-#endif  // !CONFIG_REMOVE_DIST_WTD_COMP
-        1, 1,   1,   0, 0, 1, 1, 1, 1,
-#if !CONFIG_REMOVE_DUAL_FILTER
-        1,
-#endif                                          // !CONFIG_REMOVE_DUAL_FILTER
-        1, 1,   1,   1, 1, 1, 1, 3, 1, 1, 0 },  // cfg
-  },
-};
+#endif  // !CONFIG_REMOVE_DUAL_FILTER
+        1, 1,   1,   1, 1, 1, 1, 3, 1, 1, 0,
+#if CONFIG_NEW_INTER_MODES
+        0,
+#endif  // CONFIG_NEW_INTER_MODES
+    },  // cfg
+} };
 
 // This data structure and function are exported in aom/aomcx.h
 #ifndef VERSION_STRING
@@ -3883,7 +4044,7 @@ aom_codec_iface_t aom_codec_av1_cx_algo = {
   },
   {
       // NOLINT
-      2,                           // 2 cfg
+      1,                           // 1 cfg
       encoder_usage_cfg,           // aom_codec_enc_cfg_t
       encoder_encode,              // aom_codec_encode_fn_t
       encoder_get_cxdata,          // aom_codec_get_cx_data_fn_t

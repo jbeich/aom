@@ -22,8 +22,10 @@ import numpy as np
 import scipy.interpolate
 import matplotlib.pyplot as plt
 from operator import itemgetter
-from Config import LogLevels, ContentPath, Platform, Path_RDResults, QPs
+from Config import LogLevels, ContentPath, Platform, Path_RDResults, QPs, PSNR_Y_WEIGHT, PSNR_U_WEIGHT, PSNR_V_WEIGHT, \
+APSNR_Y_WEIGHT, APSNR_U_WEIGHT, APSNR_V_WEIGHT, CTC_VERSION, InterpolatePieces, UsePCHIPInterpolation, FFMPEG
 from AV2CTCVideo import Y4M_CLIPs, CTC_TEST_SET
+from CalcBDRate import BD_RATE
 
 class Clip:
     file_name = ""
@@ -51,6 +53,101 @@ class Clip:
         else:
             self.fps = round(self.fps_num / self.fps_denom)
         self.bit_depth = Bit_depth
+
+class Record:
+    test_cfg = ""
+    encode_mode = ""
+    codec_name = ""
+    encode_preset = ""
+    file_class = ""
+    file_name = ""
+    orig_res = ""
+    fps = ""
+    bit_depth = 0
+    coded_res = ""
+    qp = 0
+    bitrate = 0.0
+    psnr_y = 0.0
+    psnr_u = 0.0
+    psnr_v = 0.0
+    overall_psnr = 0.0
+    ssim_y = 0.0
+    ms_ssim_y = 0.0
+    vmaf_y = 0.0
+    vmaf_y_neg = 0.0
+    psnr_hvs = 0.0
+    ciede2k = 0.0
+    apsnr_y = 0.0
+    apsnr_u = 0.0
+    apsnr_v = 0.0
+    overall_apsnr = 0.0
+    enc_time = 0.0
+    dec_time = 0.0
+    enc_instr = 0.0
+    dec_instr = 0.0
+    enc_cycle = 0.0
+    dec_cycle = 0.0
+
+    def __init__(self, test_cfg, encode_mode , codec_name, encode_preset, file_class, file_name,
+                 orig_res, fps, bit_depth, coded_res, qp, bitrate, psnr_y, psnr_u, psnr_v,
+                 ssim_y, ms_ssim_y, vmaf_y, vmaf_y_neg, psnr_hvs, ciede2k, apsnr_y, apsnr_u,
+                 apsnr_v, enc_time, dec_time, enc_instr, dec_instr, enc_cycle, dec_cycle):
+
+        self.test_cfg = test_cfg
+        self.encode_mode = encode_mode
+        self.codec_name = codec_name
+        self.encode_preset = encode_preset
+        self.file_class = file_class
+        self.file_name = file_name
+        self.orig_res = orig_res
+        self.fps = fps
+        self.bit_depth = bit_depth
+        self.coded_res = coded_res
+        self.qp = qp
+        self.bitrate = float(bitrate)
+        self.psnr_y = float(psnr_y)
+        self.psnr_u = float(psnr_u)
+        self.psnr_v = float(psnr_v)
+        self.overall_psnr = (PSNR_Y_WEIGHT * self.psnr_y +
+                             PSNR_U_WEIGHT * self.psnr_u +
+                             PSNR_V_WEIGHT * self.psnr_v) / (PSNR_Y_WEIGHT + PSNR_U_WEIGHT + PSNR_V_WEIGHT)
+        self.ssim_y = float(ssim_y)
+        self.ms_ssim_y = float(ms_ssim_y)
+        self.vmaf_y = float(vmaf_y)
+        self.vmaf_y_neg = float(vmaf_y_neg)
+        self.psnr_hvs = float(psnr_hvs)
+        self.ciede2k = float(ciede2k)
+        self.apsnr_y = float(apsnr_y)
+        self.apsnr_u = float(apsnr_u)
+        self.apsnr_v = float(apsnr_v)
+        self.overall_apsnr = 10 * math.log10(1 / ((APSNR_Y_WEIGHT/pow(10, (self.apsnr_y / 10)) +
+                                                   APSNR_U_WEIGHT/pow(10, (self.apsnr_u / 10)) +
+                                                   APSNR_V_WEIGHT/pow(10, (self.apsnr_v / 10))) /
+                                              (APSNR_Y_WEIGHT + APSNR_U_WEIGHT + APSNR_V_WEIGHT)))
+        self.enc_time = float(enc_time)
+        self.dec_time = float(dec_time)
+        self.enc_instr = float(enc_instr)
+        self.dec_instr = float(dec_instr)
+        self.enc_cycle = float(enc_cycle)
+        self.dec_cycle = float(dec_cycle)
+
+def ParseCSVFile(csv_file):
+    records = {}
+    csv = open(csv_file, 'rt')
+    for line in csv:
+        if not line.startswith('TestCfg'):
+            words = re.split(',', line.strip())
+            record = Record(words[0], words[1], words[2], words[3], words[4], words[5], words[6], words[7], words[8],
+                            words[9], words[10], words[11], words[12], words[13], words[14], words[15], words[16],
+                            words[17],words[18], words[19], words[20], words[21], words[22], words[23], words[24],
+                            words[25], words[26],words[27], words[28],words[29])
+            key = record.coded_res + "_" + record.qp
+            if record.file_name not in records.keys():
+                records[record.file_name] = {}
+            records[record.file_name][key] = record
+
+    csv.close()
+    return records
 
 def Cleanfolder(folder):
     if os.path.isdir(folder):
@@ -310,11 +407,14 @@ def SetupLogging(level, logcmdonly, name, cmd_log_path, test_log_path):
         Logger.setLevel(levelname)
 
 def md5(fname):
-    hash_md5 = hashlib.md5()
-    with open(fname, "rb") as f:
-        for chunk in iter(lambda: f.read(4096), b""):
-            hash_md5.update(chunk)
-    return hash_md5.hexdigest()
+    if os.path.exists(fname):
+        hash_md5 = hashlib.md5()
+        with open(fname, "rb") as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                hash_md5.update(chunk)
+        return hash_md5.hexdigest()
+    else:
+        return ""
 
 def GatherInstrCycleInfo(bsfile, Path_TimingLog):
     assert(Platform != "Windows" and Platform != "Darwin")
@@ -417,15 +517,16 @@ def GatherPerframeStat(test_cfg,EncodeMethod,CodecName,EncodePreset,clip, name, 
                              clip.fps,clip.bit_depth,qp,enc_list[i],perframe_vmaf_log[i]))
 
 
-def plot_rd_curve(br, qty, qty_str, name, line_color=None, line_style=None, marker_format=None):
+def plot_rd_curve(br, qty, qty_str, name, x_label, line_color=None,
+                  line_style=None, marker_format=None):
     # generate samples between max and min of quality metrics
-    '''
     brqtypairs = []
     for i in range(min(len(qty), len(br))):
         brqtypairs.append((br[i], qty[i]))
     brqtypairs.sort(key = itemgetter(0, 1))
     new_br = [brqtypairs[i][0] for i in range(len(brqtypairs))]
     new_qty = [brqtypairs[i][1] for i in range(len(brqtypairs))]
+    '''
     min_br = min(new_br)
     max_br = max(new_br)
     lin = np.linspace(min_br, max_br, num=100, retstep=True)
@@ -434,12 +535,12 @@ def plot_rd_curve(br, qty, qty_str, name, line_color=None, line_style=None, mark
     plt.plot(samples, v, linestyle=line_style, color=line_color)
     plt.scatter(new_br, new_qty, color=line_color, marker=marker_format)
     '''
-    plt.plot(br, qty, linestyle=line_style, color=line_color)
-    plt.scatter(br, qty, color=line_color, marker=marker_format, label=name)
-    plt.xlabel('bdrate(Kbps)')
+    plt.plot(new_br, new_qty, linestyle=line_style, color=line_color)
+    plt.scatter(new_br, new_qty, color=line_color, marker=marker_format, label=name)
+    plt.xlabel(x_label)
     plt.ylabel(qty_str)
 
-def Interpolate_Bilinear(RDPoints, QPs, logBr=True):
+def Interpolate_Bilinear(RDPoints, QPs, InterpolatePieces, logBr=True):
     '''
     generate interpolated points on a RD curve.
     input is list of existing RD points as (bitrate, quality) tuple
@@ -459,11 +560,10 @@ def Interpolate_Bilinear(RDPoints, QPs, logBr=True):
         if logBr:
             br = [math.log10(br[i]) for i in range(len(br))]
 
-        addPoints = (QPs[i] - QPs[i-1])
         # slope is negative
-        qty_slope = (qty[1] - qty[0]) / addPoints
-        br_slope = (br[1] - br[0]) / addPoints
-        for j in range(0, addPoints):
+        qty_slope = (qty[1] - qty[0]) / InterpolatePieces
+        br_slope = (br[1] - br[0]) / InterpolatePieces
+        for j in range(0, InterpolatePieces):
             int_br = br[0] + j * br_slope
             int_br = pow(10, int_br)
             int_qty = qty[0] + j * qty_slope
@@ -471,46 +571,8 @@ def Interpolate_Bilinear(RDPoints, QPs, logBr=True):
 
     # add the last rd points from the input
     int_points += [(RDPoints[-1][0], RDPoints[-1][1])]
+    int_points = [(round(int_points[i][0], 6), round(int_points[i][1], 6)) for i in range(len(int_points))]
 
-    '''
-    print("before interpolation:")
-    for i in range(len(RDPoints)):
-        print("%f, %f"%(RDPoints[i][0], RDPoints[i][1]))
-    print("after interpolation:")
-    for i in range(len(int_points)):
-        print("%f, %f"%(int_points[i][0], int_points[i][1]))
-    '''
-    return int_points
-
-def Interpolate_PCHIP(RDPoints, QPs):
-    '''
-    generate interpolated points on a RD curve.
-    input is list of existing RD points as (bitrate, quality) tuple
-    total number of interpolated points depends on the min and max QP
-    this version interpolate over the bitrate and quality range piece by
-    piece, so all input RD data points are guaranteed in the output
-    '''
-    # sort the pair based on bitrate in increasing order
-    # if bitrate is the same, then sort based on quality in increasing order
-    RDPoints.sort(key = itemgetter(0, 1))
-    br = [RDPoints[i][0] for i in range(len(RDPoints))]
-    qty = [RDPoints[i][1] for i in range(len(RDPoints))]
-    # sort QPs in decreasing order
-    QPs.sort(reverse=True)
-    int_points = []
-
-    for i in range(1, len(QPs)):
-        # generate samples between max and min of quality metrics
-        max_qp = QPs[i - 1]; min_qp = QPs[i]
-        lin = np.linspace(br[i-1], br[i], num = (max_qp - min_qp + 1), retstep = True)
-        int_br = lin[0]
-
-        # interpolation using pchip
-        int_qty = scipy.interpolate.pchip_interpolate(br, qty, int_br)
-        int_points += [(int_br[i], int_qty[i]) for i in range(len(int_br) - 1)]
-
-    # add the last rd points from the input
-    int_points += [(br[-1], qty[-1])]
     '''
     print("before interpolation:")
     for i in range(len(br)):
@@ -527,6 +589,95 @@ def Interpolate_PCHIP(RDPoints, QPs):
     '''
     return int_points
 
+def Interpolate_PCHIP(RDPoints, QPs, InterpolatePieces, logBr=True):
+    '''
+    generate interpolated points on a RD curve.
+    input is list of existing RD points as (bitrate, quality) tuple
+    total number of interpolated points depends on the min and max QP
+    this version interpolate over the bitrate and quality range piece by
+    piece, so all input RD data points are guaranteed in the output
+    '''
+    # sort the pair based on bitrate in increasing order
+    # if bitrate is the same, then sort based on quality in increasing order
+    RDPoints.sort(key = itemgetter(0, 1))
+    br = [RDPoints[i][0] for i in range(len(RDPoints))]
+    if logBr:
+        br = [math.log10(br[i]) for i in range(len(br))]
+    qty = [RDPoints[i][1] for i in range(len(RDPoints))]
+    # sort QPs in decreasing order
+    QPs.sort(reverse=True)
+    int_points = []
+
+    for i in range(1, len(QPs)):
+        # generate samples between max and min of quality metrics
+        lin = np.linspace(br[i-1], br[i], num = InterpolatePieces, retstep = True)
+        int_br = lin[0]
+
+        # interpolation using pchip
+        int_qty = scipy.interpolate.pchip_interpolate(br, qty, int_br)
+        int_points += [(pow(10, int_br[i]), int_qty[i]) for i in range(len(int_br) - 1)]
+    # add the last rd points from the input
+    int_points += [(pow(10, br[-1]), qty[-1])]
+
+    int_points = [(round(int_points[i][0], 6), round(int_points[i][1], 6)) for i in range(len(int_points))]
+
+    '''
+    print("before interpolation:")
+    for i in range(len(br)):
+        print("%f, %f"%(br[i], qty[i]))
+    print("after interpolation:")
+    for i in range(len(int_points)):
+        print("%f, %f"%(int_points[i][0], int_points[i][1]))
+
+    result = all(elem in int_points for elem in RDPoints)
+    if result:
+        print("Yes, Interpolation contains all elements in the input")
+    else:
+        print("No, Interpolation does not contain all elements in the input")
+    '''
+    return int_points
+
+def Interpolate_PCHIP1(RDPoints, QPs, InterpolatePieces, logBr=True):
+    '''
+    generate interpolated points on a RD curve.
+    input is list of existing RD points as (bitrate, quality) tuple
+    total number of interpolated points depends on the min and max QP
+    '''
+    # sort the pair based on bitrate in increasing order
+    # if bitrate is the same, then sort based on quality in increasing order
+    RDPoints.sort(key = itemgetter(0, 1))
+    br = [RDPoints[i][0] for i in range(len(RDPoints))]
+    if logBr:
+        br = [math.log10(br[i]) for i in range(len(br))]
+    qty = [RDPoints[i][1] for i in range(len(RDPoints))]
+
+    # generate samples between max and min of quality metrics
+    min_br = min(br); max_br = max(br)
+    num_points = (len(QPs) - 1) * InterpolatePieces + 1
+    lin = np.linspace(min_br, max_br, num = num_points, retstep = True)
+    int_br = lin[0]
+
+    # interpolation using pchip
+    int_qty = scipy.interpolate.pchip_interpolate(br, qty, int_br)
+
+    int_points = [(pow(10, int_br[i]), int_qty[i]) for i in range(len(int_br))]
+    int_points = [(round(int_points[i][0], 6), round(int_points[i][1], 6)) for i in range(len(int_points))]
+
+    '''
+    print("before interpolation:")
+    for i in range(len(br)):
+        print("%f, %f"%(br[i], qty[i]))
+    print("after interpolation:")
+    for i in range(len(int_points)):
+        print("%f, %f"%(int_points[i][0], int_points[i][1]))
+
+    result = all(elem in int_points for elem in RDPoints)
+    if result:
+        print("Yes, Interpolation contains all elements in the input")
+    else:
+        print("No, Interpolation does not contain all elements in the input")
+    '''
+    return int_points
 
 '''
 The convex_hull function is adapted based on the original python implementation
@@ -574,6 +725,28 @@ def convex_hull(points):
 
     return lower, upper
 
+def ConvertY4MToYUV(clip, yuv_file, LogCmdOnly=False):
+    cmd = FFMPEG + " -i %s %s"%(clip.file_path, yuv_file)
+    ExecuteCmd(cmd, LogCmdOnly)
+
+def ConvertYUVToY4M(clip, yuv_file, y4m_file, LogCmdOnly=False):
+    if clip.fmt == '420' and clip.bit_depth == 8:
+        pix_fmt = "yuv420p"
+    elif clip.fmt == '420' and clip.bit_depth == 10:
+        pix_fmt = "yuv420p10le"
+    else:
+        print("Unsupported color format")
+
+    cmd = FFMPEG + " -s %dx%d -r %d -pix_fmt %s -i %s " \
+          % (clip.width, clip.height, clip.fps, pix_fmt, yuv_file)
+
+    if clip.fmt == '420' and clip.bit_depth == 10:
+        cmd += " -strict -1 "
+
+    cmd += y4m_file
+
+    ExecuteCmd(cmd, LogCmdOnly)
+
 '''
 ######################################
 # main
@@ -581,6 +754,72 @@ def convex_hull(points):
 if __name__ == "__main__":
 
     reslutions = ["2160p","1440p","1080p","720p","540p","360p"]
+
+    v100 = {
+        "2160p" :[(28124.3888,42.551087), (13410.6054,41.963043),(6624.8041,41.253859),
+                  (3708.8954,40.269257), (2267.0327,38.851295), (1202.0951,36.555146)],
+        "1440p" :[(13059.8067,41.676595),(7204.4079,41.138107), (3991.3772,40.326393),
+                  (2421.4641,39.111245), (1480.2871,37.463730), (776.6609,34.972284)],
+        "1080p" :[(8636.0310,40.758537), (4963.3505,40.201735),(2942.9205,39.319614),
+                  (1794.6165,38.008143), (1100.3667,36.289067), (572.5143,33.780085)],
+        "720p"  :[(5014.1575,38.466380), (3109.7014,37.982144), (1908.0157,37.170517),
+                  (1169.5947,35.960981), (709.4616,34.320416), (367.4529,31.955818)],
+        "540p"  :[(3529.1047,36.319288), (2226.4025,35.926225), (1377.1422,35.258939),
+                  (847.5488,34.235784),  (514.2378,32.783286), (264.8687,30.603150)],
+        "360p"  :[(2074.6269,33.283164), (1337.9322,33.014666), (837.4124,32.539225),
+                  (518.8043,31.7650240), (317.5901,30.611798), (163.9739,28.715523)],
+    }
+
+    ext_quant = {
+        "2160p" :[(21904.5767,42.352874), (8260.0464,41.485785), (3484.7011,40.150674),
+                  (1721.3162,38.029638), (840.7506,35.148980), (403.3394,31.916100)],
+        "1440p" :[(11079.3354,41.531791), (4732.6200,40.600643), (2264.0707,38.974245),
+                  (1123.4501,36.561528), (535.7830,33.499672), (247.1633,30.225781)],
+        "1080p" :[(7414.1059,40.608075), (3422.7434,39.617804), (1681.2615,37.863167),
+                  (827.9659,35.367416), (392.5133,32.287467), (176.3639,29.046296)],
+        "720p"  :[(4369.3869,38.339367), (2196.3292,37.445383), (1095.0071,35.819310),
+                  (534.0604,33.443757), (249.4170,30.538937), (111.7762,27.447369)],
+        "540p"  :[(3146.1818,36.233705), (1621.3030,35.523001), (805.4026,34.153004),
+                  (395.6523,32.064279), (185.0912,29.359337), (84.0083,26.433119)],
+        "360p"  :[(1852.7085,33.227620), (979.2103,32.730902), (493.6036,31.698794),
+                  (244.7067,29.973807), (116.4755,27.604518), (54.5436,24.896702)],
+    }
+
+    Int_RDPoints = {}
+    Int_RDPoints["v100"] = []; Int_RDPoints["ext_quant"] = []
+    for res in reslutions:
+        rdpnts = [(v100[res][i][0], v100[res][i][1]) for i in range(len(v100[res]))]
+        if UsePCHIPInterpolation:
+            int_rdpnts = Interpolate_PCHIP(rdpnts, QPs['AS'][:], InterpolatePieces, True)
+        else:
+            int_rdpnts = Interpolate_Bilinear(rdpnts, QPs['AS'][:], InterpolatePieces, True)
+        Int_RDPoints["v100"] += int_rdpnts
+        rdpnts = [(ext_quant[res][i][0], ext_quant[res][i][1]) for i in range(len(ext_quant[res]))]
+        if UsePCHIPInterpolation:
+            int_rdpnts = Interpolate_PCHIP(rdpnts, QPs['AS'][:], InterpolatePieces, True)
+        else:
+            int_rdpnts = Interpolate_Bilinear(rdpnts, QPs['AS'][:], InterpolatePieces, True)
+        Int_RDPoints["ext_quant"] += int_rdpnts
+
+    br = {}; psnr = {}
+    lower, upper = convex_hull(Int_RDPoints["v100"])
+    br["v100"] = [upper[i][0] for i in range(len(upper))]
+    psnr["v100"] = [upper[i][1] for i in range(len(upper))]
+
+    lower, upper = convex_hull(Int_RDPoints["ext_quant"])
+    br["ext_quant"] = [upper[i][0] for i in range(len(upper))]
+    psnr["ext_quant"] = [upper[i][1] for i in range(len(upper))]
+
+
+    plt.figure(figsize=(15, 10))
+    plot_rd_curve(br["v100"], psnr["v100"], "psnr_y", 'v1.0.0', "bitrate(Kbps)", 'b', '-', '*')
+    plot_rd_curve(br["ext_quant"], psnr["ext_quant"], "psnr_y", 'ext-quant', "bitrate(Kbps)", 'r', '-', '+')
+
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+    bdrate = BD_RATE("psnr_y", br["v100"], psnr["v100"], br["ext_quant"], psnr["ext_quant"])
 
     rdpoints = {
         "2160p" :[(37547.9659,43.9085),(19152.0922,42.5703),(9291.0302,41.048),
@@ -604,13 +843,13 @@ if __name__ == "__main__":
         "540p" : ['r', '-', '^'],
         "360p" : ['b', '-', '<'],
     }
-    #plt.figure(figsize=(15, 10))
+    plt.figure(figsize=(15, 10))
 
     print("Before Interpolation:")
     for res in reslutions:
         br   = [rdpoints[res][i][0] for i in range(len(rdpoints[res]))]
         psnr = [rdpoints[res][i][1] for i in range(len(rdpoints[res]))]
-        plot_rd_curve(br, psnr, "psnr_y", res, formats[res][0],formats[res][1],formats[res][2])
+        plot_rd_curve(br, psnr, "psnr_y", res, "bitrate(Kbps)", formats[res][0],formats[res][1],formats[res][2])
 
     plt.legend()
     plt.grid(True)
@@ -637,7 +876,7 @@ if __name__ == "__main__":
         Int_RDPoints += int_rdpnts
         br = [int_rdpoints[res][i][0] for i in range(len(int_rdpoints[res]))]
         psnr = [int_rdpoints[res][i][1] for i in range(len(int_rdpoints[res]))]
-        plot_rd_curve(br, psnr, "psnr_y", res, formats[res][0], formats[res][1], formats[res][2])
+        plot_rd_curve(br, psnr, "psnr_y", res, "bitrate(Kbps)", formats[res][0], formats[res][1], formats[res][2])
 
     print("Number of Interpolated points = %d" % NumPoints)
 
@@ -653,7 +892,7 @@ if __name__ == "__main__":
     print(upper)
 
     plt.figure(figsize=(15, 10))
-    plot_rd_curve(br, psnr, "psnr_y", 'convex-hull', 'b', '-', '*')
+    plot_rd_curve(br, psnr, "psnr_y", 'convex-hull', "bitrate(Kbps)", 'b', '-', '*')
     plt.legend()
     plt.grid(True)
     plt.show()

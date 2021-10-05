@@ -45,7 +45,6 @@ typedef struct av1_codec_arg_definitions {
   arg_def_t skip;
   arg_def_t step;
   arg_def_t good_dl;
-  arg_def_t rt_dl;
   arg_def_t quietarg;
   arg_def_t verbosearg;
   arg_def_t psnrarg;
@@ -132,15 +131,26 @@ typedef struct av1_codec_arg_definitions {
   arg_def_t enable_deblocking;
   arg_def_t enable_cdef;
   arg_def_t enable_restoration;
+#if CONFIG_CCSO
+  arg_def_t enable_ccso;
+#endif
+  arg_def_t disable_ml_partition_speed_features;
   arg_def_t enable_rect_partitions;
   arg_def_t enable_ab_partitions;
   arg_def_t enable_1to4_partitions;
+  arg_def_t disable_ml_transform_speed_features;
 #if CONFIG_SDP
   arg_def_t enable_sdp;
 #endif
-#if CONFIG_EXT_RECUR_PARTITIONS
-  arg_def_t disable_ml_partition_speed_features;
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
+#if CONFIG_MRLS
+  arg_def_t enable_mrls;
+#endif
+#if CONFIG_ORIP
+  arg_def_t enable_orip;
+#endif
+#if CONFIG_IST
+  arg_def_t enable_ist;
+#endif
   arg_def_t min_partition_size;
   arg_def_t max_partition_size;
 #if !CONFIG_REMOVE_DUAL_FILTER
@@ -227,6 +237,9 @@ typedef struct av1_codec_arg_definitions {
   arg_def_t vbr_corpus_complexity_lap;
   arg_def_t subgop_config_str;
   arg_def_t subgop_config_path;
+#if CONFIG_NEW_INTER_MODES
+  arg_def_t max_drl_refmvs;
+#endif  // CONFIG_NEW_INTER_MODES
 #endif  // CONFIG_AV1_ENCODER
 } av1_codec_arg_definitions_t;
 

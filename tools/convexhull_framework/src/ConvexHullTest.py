@@ -23,7 +23,7 @@ from Utils import GetShortContentName, CreateChart_Scatter,\
      SetupLogging, UpdateChart, AddSeriesToChart_Scatter_Rows,\
      Cleanfolder, CreateClipList, Clip, GatherPerfInfo, GetEncLogFile, \
      GetRDResultCsvFile, GatherPerframeStat, GatherInstrCycleInfo, \
-     Interpolate_Bilinear, convex_hull, DeleteFile
+     Interpolate_Bilinear, Interpolate_PCHIP, convex_hull, DeleteFile, md5
 from PostAnalysis_Summary import GenerateSumRDExcelFile,\
      GenerateSumCvxHullExcelFile
 from ScalingTest import Run_Scaling_Test, SaveScalingResultsToExcel
@@ -34,7 +34,8 @@ from Config import LogLevels, FrameNum, QPs, CvxH_WtCols,\
      EncodeMethods, CodecNames, LoggerName, DnScaleRatio, TargetQtyMetrics, \
      CvxHDataRows, CvxHDataStartRow, CvxHDataStartCol, CvxHDataNum, \
      Int_ConvexHullColor, EnablePreInterpolation, AS_DOWNSCALE_ON_THE_FLY,\
-     UsePerfUtil, ScaleMethods, EnableTimingInfo
+     UsePerfUtil, ScaleMethods, EnableTimingInfo, InterpolatePieces, EnableMD5, \
+     UsePCHIPInterpolation, HEVC_QPs
 
 ###############################################################################
 ##### Helper Functions ########################################################
@@ -194,7 +195,10 @@ def Run_ConvexHull_Test(clip, dnScalAlgo, upScalAlgo, ScaleMethod, LogCmdOnly = 
         ds_clip = Clip(GetShortContentName(dnscalyuv, False)+'.y4m', dnscalyuv,
                        clip.file_class, DnScaledW, DnScaledH, clip.fmt, clip.fps_num,
                        clip.fps_denom, clip.bit_depth)
-        for QP in QPs['AS']:
+        QPSet = QPs['AS']
+        if CodecName == "hevc":
+            QPSet = HEVC_QPs['AS']
+        for QP in QPSet:
             Utils.Logger.info("start encode and upscale for QP %d" % QP)
             JobName = '%s_%s_%s_%s_%dx%d_Preset_%s_QP_%d' % \
                       (GetShortContentName(clip.file_name, False),
@@ -236,13 +240,17 @@ def SaveConvexHullResultsToExcel(content, ScaleMethod, dnScAlgos, upScAlgos, csv
         shtname = dnScAlgos[i] + '--' + upScAlgos[i]
         shts.append(wb.add_worksheet(shtname))
 
+    QPSet = QPs['AS']
+    if CodecName == "hevc":
+        QPSet = HEVC_QPs['AS']
+
     DnScaledRes = [(int(clip.width / ratio), int(clip.height / ratio))
                    for ratio in DnScaleRatio]
     contentname = GetShortContentName(clip.file_name)
     for sht, indx in zip(shts, list(range(len(dnScAlgos)))):
         # write QP
         sht.write(1, 0, "QP")
-        sht.write_column(CvxH_WtRows[0], 0, QPs['AS'])
+        sht.write_column(CvxH_WtRows[0], 0, QPSet)
         shtname = sht.get_name()
 
         charts = [];  y_mins = {}; y_maxs = {}; RDPoints = {}; Int_RDPoints = {}
@@ -262,36 +270,43 @@ def SaveConvexHullResultsToExcel(content, ScaleMethod, dnScAlgos, upScAlgos, csv
             sht.write_row(1, col + 1, QualityList)
 
             bitratesKbps = []; qualities = []
-            for qp in QPs['AS']:
+
+            for qp in QPSet:
                 bs, reconyuv = GetBsReconFileName(EncodeMethod, CodecName, 'AS',
                                                   EncodePreset, clip, DnScaledW,
                                                   DnScaledH, ScaleMethod, dnScAlgos[indx],
                                                   upScAlgos[indx], qp,
                                                   Path_Bitstreams, False, i)
 
-                bitrate = (os.path.getsize(bs) * 8 * (clip.fps_num / clip.fps_denom)
-                           / FrameNum['AS']) / 1000.0
+                bitrate = round((os.path.getsize(bs) * 8 * (clip.fps_num / clip.fps_denom)
+                           / FrameNum['AS']) / 1000.0, 6)
                 bitratesKbps.append(bitrate)
                 quality, perframe_vmaf_log = GatherQualityMetrics(reconyuv, Path_QualityLog)
                 qualities.append(quality)
 
                 #"TestCfg,EncodeMethod,CodecName,EncodePreset,Class,OrigRes,Name,FPS,Bit Depth,CodedRes,QP,Bitrate(kbps)")
-                csv.write("%s,%s,%s,%s,%s,%s,%s,%.4f,%d,%s,%d,%.4f"%
+                csv.write("%s,%s,%s,%s,%s,%s,%s,%.4f,%d,%s,%d,%f"%
                           ("AS", EncodeMethod, CodecName, EncodePreset, clip.file_class,contentname,
                            str(clip.width)+"x"+str(clip.height), clip.fps,clip.bit_depth,
                            str(DnScaledW)+"x"+str(DnScaledH),qp,bitrate))
                 for qty in quality:
-                    csv.write(",%.4f"%qty)
+                    csv.write(",%f"%qty)
 
                 if EnableTimingInfo:
                     if UsePerfUtil:
                         enc_time, dec_time, enc_instr, dec_instr, enc_cycles, dec_cycles = GatherInstrCycleInfo(bs, Path_PerfLog)
-                        csv.write(",%.2f,%.2f,%s,%s,%s,%s,\n"%(enc_time,dec_time,enc_instr,dec_instr,enc_cycles,dec_cycles))
+                        csv.write(",%.2f,%.2f,%s,%s,%s,%s,"%(enc_time,dec_time,enc_instr,dec_instr,enc_cycles,dec_cycles))
                     else:
                         enc_time, dec_time = GatherPerfInfo(bs, Path_PerfLog)
-                        csv.write(",%.2f,%.2f,\n" % (enc_time, dec_time))
+                        csv.write(",%.2f,%.2f," % (enc_time, dec_time))
                 else:
-                    csv.write(",,,\n")
+                    csv.write(",,,")
+
+                if EnableMD5:
+                    enc_md5 = md5(bs)
+                    dec_md5 = md5(reconyuv)
+                    csv.write("%s,%s" % (enc_md5, dec_md5))
+                csv.write("\n")
 
                 if (EncodeMethod == 'aom'):
                     enc_log = GetEncLogFile(bs, Path_EncLog)
@@ -315,7 +330,10 @@ def SaveConvexHullResultsToExcel(content, ScaleMethod, dnScAlgos, upScAlgos, csv
                 rdpnts = [(brt, qty) for brt, qty in zip(bitratesKbps, qs)]
                 RDPoints[x] = RDPoints[x] + rdpnts
                 if EnablePreInterpolation:
-                    int_rdpnts = Interpolate_Bilinear(rdpnts, QPs['AS'][:], True)
+                    if UsePCHIPInterpolation:
+                        int_rdpnts = Interpolate_PCHIP(rdpnts, QPSet[:], InterpolatePieces, True)
+                    else:
+                        int_rdpnts = Interpolate_Bilinear(rdpnts, QPSet[:], InterpolatePieces, True)
                     Int_RDPoints[x] = Int_RDPoints[x] + int_rdpnts
 
         # add convexhull curve to charts
@@ -403,8 +421,8 @@ if __name__ == "__main__":
     #sys.argv = ["","-f","scaling", "-t", "hdrtool"]
     #sys.argv = ["", "-f", "sumscaling", "-t", "hdrtool"]
     #sys.argv = ["", "-f", "encode","-c","av2","-m","aom","-p","6", "-t", "hdrtool"]
-    #sys.argv = ["", "-f", "convexhull","-c","av2","-m","aom","-p","6", "-t", "hdrtool"]
-    #sys.argv = ["", "-f", "summary", "-c", "av2", "-m", "aom", "-p", "6", "-t", "hdrtool"]
+    #sys.argv = ["", "-f", "convexhull","-c","av2","-m","aom","-p","0", "-t", "hdrtool"]
+    #sys.argv = ["", "-f", "summary", "-c", "av2", "-m", "aom", "-p", "0", "-t", "hdrtool"]
     ParseArguments(sys.argv)
 
     # preparation for executing functions
@@ -448,6 +466,9 @@ if __name__ == "__main__":
         csv.write(",EncT[s],DecT[s]")
         if UsePerfUtil:
             csv.write(",EncInstr,DecInstr,EncCycles,DecCycles")
+        if EnableMD5:
+            csv.write(",EncMD5,DecMD5")
+
         csv.write("\n")
 
         perframe_csv = open(perframe_csvfile, 'wt')

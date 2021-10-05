@@ -125,7 +125,6 @@ static INLINE void calculate_dqcoeff_lp_and_store(const int16x8_t qcoeff,
       vmull_s16(vget_low_s16(qcoeff), vget_low_s16(dequant));
   const int32x4_t dqcoeff_1 =
       vmull_s16(vget_high_s16(qcoeff), vget_high_s16(dequant));
-
   vst1q_s16(dqcoeff, vcombine_s16(vmovn_s32(dqcoeff_0), vmovn_s32(dqcoeff_1)));
 }
 

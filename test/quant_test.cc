@@ -77,8 +77,7 @@ TEST_P(QMTest, TestNoMisMatchQM2) { DoTest(0, 8); }
 TEST_P(QMTest, TestNoMisMatchQM3) { DoTest(9, 15); }
 
 AV1_INSTANTIATE_TEST_SUITE(QMTest,
-                           ::testing::Values(::libaom_test::kRealTime,
-                                             ::libaom_test::kOnePassGood),
+                           ::testing::Values(::libaom_test::kOnePassGood),
                            ::testing::Range(5, 9));
 
 typedef struct {
@@ -171,7 +170,7 @@ TEST_P(QuantizerBoundsCheckTestLarge, QuantizerBoundsCheckEncodeTest) {
 }
 
 AV1_INSTANTIATE_TEST_SUITE(QuantizerBoundsCheckTestLarge,
-                           NONREALTIME_TEST_MODES,
+                           GOODQUALITY_TEST_MODES,
                            ::testing::ValuesIn(QuantTestParams),
                            ::testing::Values(AOM_Q, AOM_VBR, AOM_CBR, AOM_CQ));
 }  // namespace

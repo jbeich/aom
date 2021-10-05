@@ -44,6 +44,16 @@
 
 #define RD_THRESH_POW 1.25
 
+#if CONFIG_EXTQUANT
+#define RD_THRESH_MUL 4.40
+#define RDMULT_FROM_Q2_NUM 96
+#define RDMULT_FROM_Q2_DEN 32
+#else
+#define RD_THRESH_MUL 5.12
+#define RDMULT_FROM_Q2_NUM 88
+#define RDMULT_FROM_Q2_DEN 24
+#endif  // CONFIG_EXTQUANT
+
 // The baseline rd thresholds for breaking out of the rd loop for
 // certain modes are assumed to be based on 8x8 blocks.
 // This table is used to correct for block size.
@@ -127,6 +137,10 @@ void av1_fill_mode_rates(AV1_COMMON *const cm, ModeCosts *mode_costs,
       av1_cost_tokens_from_cdf(mode_costs->y_mode_costs[i][j],
                                fc->kf_y_cdf[i][j], NULL);
 
+#if CONFIG_MRLS
+  av1_cost_tokens_from_cdf(mode_costs->mrl_index_cost, fc->mrl_index_cdf, NULL);
+#endif
+
   for (i = 0; i < BLOCK_SIZE_GROUPS; ++i)
     av1_cost_tokens_from_cdf(mode_costs->mbmode_cost[i], fc->y_mode_cdf[i],
                              NULL);
@@ -193,14 +207,43 @@ void av1_fill_mode_rates(AV1_COMMON *const cm, ModeCosts *mode_costs,
       cost_u[u] += sign_cost[joint_sign];
   }
 
+#if CONFIG_NEW_TX_PARTITION
+  av1_cost_tokens_from_cdf(mode_costs->intra_2way_txfm_partition_cost,
+                           fc->intra_2way_txfm_partition_cdf, NULL);
+  av1_cost_tokens_from_cdf(mode_costs->intra_2way_rect_txfm_partition_cost,
+                           fc->intra_2way_rect_txfm_partition_cdf, NULL);
+  for (i = 0; i < TX_SIZE_CONTEXTS; ++i) {
+    // Square
+    av1_cost_tokens_from_cdf(mode_costs->intra_4way_txfm_partition_cost[0][i],
+                             fc->intra_4way_txfm_partition_cdf[0][i], NULL);
+    // Rectangular
+    av1_cost_tokens_from_cdf(mode_costs->intra_4way_txfm_partition_cost[1][i],
+                             fc->intra_4way_txfm_partition_cdf[1][i], NULL);
+  }
+#else
   for (i = 0; i < MAX_TX_CATS; ++i)
     for (j = 0; j < TX_SIZE_CONTEXTS; ++j)
       av1_cost_tokens_from_cdf(mode_costs->tx_size_cost[i][j],
                                fc->tx_size_cdf[i][j], NULL);
+#endif  // CONFIG_NEW_TX_PARTITION
 
+#if CONFIG_NEW_TX_PARTITION
+  av1_cost_tokens_from_cdf(mode_costs->inter_2way_txfm_partition_cost,
+                           fc->inter_2way_txfm_partition_cdf, NULL);
+  av1_cost_tokens_from_cdf(mode_costs->inter_2way_rect_txfm_partition_cost,
+                           fc->inter_2way_rect_txfm_partition_cdf, NULL);
+  for (i = 0; i < TXFM_PARTITION_INTER_CONTEXTS; ++i) {
+    // Square
+    av1_cost_tokens_from_cdf(mode_costs->inter_4way_txfm_partition_cost[0][i],
+                             fc->inter_4way_txfm_partition_cdf[0][i], NULL);
+    // Rectangular
+    av1_cost_tokens_from_cdf(mode_costs->inter_4way_txfm_partition_cost[1][i],
+                             fc->inter_4way_txfm_partition_cdf[1][i], NULL);
+#else
   for (i = 0; i < TXFM_PARTITION_CONTEXTS; ++i) {
     av1_cost_tokens_from_cdf(mode_costs->txfm_partition_cost[i],
                              fc->txfm_partition_cdf[i], NULL);
+#endif  // CONFIG_NEW_TX_PARTITION
   }
 
   for (i = TX_4X4; i < EXT_TX_SIZES; ++i) {
@@ -230,13 +273,37 @@ void av1_fill_mode_rates(AV1_COMMON *const cm, ModeCosts *mode_costs,
                                fc->angle_delta_cdf[i][j], NULL);
     }
   }
+
+#if CONFIG_ORIP
+  for (i = 0; i < PARTITION_STRUCTURE_NUM; ++i) {
+    for (j = 0; j < TOTAL_NUM_ORIP_ANGLE_DELTA; ++j) {
+      av1_cost_tokens_from_cdf(mode_costs->angle_delta_cost_hv[i][j],
+                               fc->angle_delta_cdf_hv[i][j], NULL);
+    }
+  }
+#endif
+
 #else
   for (i = 0; i < DIRECTIONAL_MODES; ++i) {
     av1_cost_tokens_from_cdf(mode_costs->angle_delta_cost[i],
                              fc->angle_delta_cdf[i], NULL);
   }
+#if CONFIG_ORIP
+  for (i = 0; i < TOTAL_NUM_ORIP_ANGLE_DELTA; ++i) {
+    av1_cost_tokens_from_cdf(mode_costs->angle_delta_cost_hv[i],
+                             fc->angle_delta_cdf_hv[i], NULL);
+  }
+#endif
 #endif  // CONFIG_SDP
+
   av1_cost_tokens_from_cdf(mode_costs->intrabc_cost, fc->intrabc_cdf, NULL);
+
+#if CONFIG_IST
+  for (i = 0; i < TX_SIZES; ++i) {
+    av1_cost_tokens_from_cdf(mode_costs->stx_flag_cost[i], fc->stx_cdf[i],
+                             NULL);
+  }
+#endif  // CONFIG_IST
 
   if (!frame_is_intra_only(cm)) {
     for (i = 0; i < COMP_INTER_CONTEXTS; ++i) {
@@ -282,6 +349,21 @@ void av1_fill_mode_rates(AV1_COMMON *const cm, ModeCosts *mode_costs,
                                fc->intra_inter_cdf[i], NULL);
     }
 
+#if CONFIG_NEW_INTER_MODES
+    for (i = 0; i < INTER_SINGLE_MODE_CONTEXTS; ++i) {
+      av1_cost_tokens_from_cdf(mode_costs->inter_single_mode_cost[i],
+                               fc->inter_single_mode_cdf[i], NULL);
+    }
+
+    for (i = 0; i < DRL_MODE_CONTEXTS; ++i) {
+      av1_cost_tokens_from_cdf(mode_costs->drl_mode_cost[0][i],
+                               fc->drl_cdf[0][i], NULL);
+      av1_cost_tokens_from_cdf(mode_costs->drl_mode_cost[1][i],
+                               fc->drl_cdf[1][i], NULL);
+      av1_cost_tokens_from_cdf(mode_costs->drl_mode_cost[2][i],
+                               fc->drl_cdf[2][i], NULL);
+    }
+#else
     for (i = 0; i < NEWMV_MODE_CONTEXTS; ++i) {
       av1_cost_tokens_from_cdf(mode_costs->newmv_mode_cost[i], fc->newmv_cdf[i],
                                NULL);
@@ -301,6 +383,7 @@ void av1_fill_mode_rates(AV1_COMMON *const cm, ModeCosts *mode_costs,
       av1_cost_tokens_from_cdf(mode_costs->drl_mode_cost0[i], fc->drl_cdf[i],
                                NULL);
     }
+#endif  // CONFIG_NEW_INTER_MODES
     for (i = 0; i < INTER_COMPOUND_MODE_CONTEXTS; ++i)
       av1_cost_tokens_from_cdf(mode_costs->inter_compound_mode_cost[i],
                                fc->inter_compound_mode_cdf[i], NULL);
@@ -371,9 +454,15 @@ static void init_me_luts_bd(int *bit16lut, int range,
 }
 
 void av1_init_me_luts(void) {
+#if CONFIG_EXTQUANT
+  init_me_luts_bd(sad_per_bit_lut_8, QINDEX_RANGE_8_BITS, AOM_BITS_8);
+  init_me_luts_bd(sad_per_bit_lut_10, QINDEX_RANGE_10_BITS, AOM_BITS_10);
+  init_me_luts_bd(sad_per_bit_lut_12, QINDEX_RANGE, AOM_BITS_12);
+#else
   init_me_luts_bd(sad_per_bit_lut_8, QINDEX_RANGE, AOM_BITS_8);
   init_me_luts_bd(sad_per_bit_lut_10, QINDEX_RANGE, AOM_BITS_10);
   init_me_luts_bd(sad_per_bit_lut_12, QINDEX_RANGE, AOM_BITS_12);
+#endif
 }
 
 static const int rd_boost_factor[16] = { 64, 32, 32, 32, 24, 16, 12, 12,
@@ -383,9 +472,18 @@ static const int rd_layer_depth_factor[6] = {
 };
 
 int av1_compute_rd_mult_based_on_qindex(const AV1_COMP *cpi, int qindex) {
+#if CONFIG_EXTQUANT
+  const int q =
+      av1_dc_quant_QTX(qindex, 0, cpi->common.seq_params.base_y_dc_delta_q,
+                       cpi->common.seq_params.bit_depth);
+  int64_t rdmult = ROUND_POWER_OF_TWO_64(
+      (int64_t)((int64_t)q * q * RDMULT_FROM_Q2_NUM / RDMULT_FROM_Q2_DEN),
+      2 * QUANT_TABLE_BITS);
+#else
   const int q = av1_dc_quant_QTX(qindex, 0, cpi->common.seq_params.bit_depth);
   int rdmult = q * q;
   rdmult = rdmult * 3 + (rdmult * 2 / 3);
+#endif
   switch (cpi->common.seq_params.bit_depth) {
     case AOM_BITS_8: break;
     case AOM_BITS_10: rdmult = ROUND_POWER_OF_TWO(rdmult, 4); break;
@@ -394,7 +492,7 @@ int av1_compute_rd_mult_based_on_qindex(const AV1_COMP *cpi, int qindex) {
       assert(0 && "bit_depth should be AOM_BITS_8, AOM_BITS_10 or AOM_BITS_12");
       return -1;
   }
-  return rdmult > 0 ? rdmult : 1;
+  return (int)(rdmult > 0 ? rdmult : 1);
 }
 
 int av1_compute_rd_mult(const AV1_COMP *cpi, int qindex) {
@@ -413,19 +511,40 @@ int av1_compute_rd_mult(const AV1_COMP *cpi, int qindex) {
 
 int av1_get_deltaq_offset(const AV1_COMP *cpi, int qindex, double beta) {
   assert(beta > 0.0);
-  int q = av1_dc_quant_QTX(qindex, 0, cpi->common.seq_params.bit_depth);
+  int q = av1_dc_quant_QTX(qindex, 0,
+#if CONFIG_EXTQUANT
+                           cpi->common.seq_params.base_y_dc_delta_q,
+#endif  // CONFIG_EXTQUANT
+                           cpi->common.seq_params.bit_depth);
   int newq = (int)rint(q / sqrt(beta));
   int orig_qindex = qindex;
   if (newq < q) {
     do {
       qindex--;
-      q = av1_dc_quant_QTX(qindex, 0, cpi->common.seq_params.bit_depth);
+      q = av1_dc_quant_QTX(qindex, 0,
+#if CONFIG_EXTQUANT
+                           cpi->common.seq_params.base_y_dc_delta_q,
+#endif  // CONFIG_EXTQUANT
+                           cpi->common.seq_params.bit_depth);
     } while (newq < q && qindex > 0);
   } else {
     do {
       qindex++;
-      q = av1_dc_quant_QTX(qindex, 0, cpi->common.seq_params.bit_depth);
+      q = av1_dc_quant_QTX(qindex, 0,
+#if CONFIG_EXTQUANT
+                           cpi->common.seq_params.base_y_dc_delta_q,
+#endif  // CONFIG_EXTQUANT
+                           cpi->common.seq_params.bit_depth);
+#if CONFIG_EXTQUANT
+    } while (newq > q &&
+             (qindex < (cpi->common.seq_params.bit_depth == AOM_BITS_8
+                            ? MAXQ_8_BITS
+                            : cpi->common.seq_params.bit_depth == AOM_BITS_10
+                                  ? MAXQ_10_BITS
+                                  : MAXQ)));
+#else
     } while (newq > q && qindex < MAXQ);
+#endif
   }
   return qindex - orig_qindex;
 }
@@ -434,17 +553,43 @@ int av1_get_adaptive_rdmult(const AV1_COMP *cpi, double beta) {
   assert(beta > 0.0);
   const AV1_COMMON *cm = &cpi->common;
   int64_t q = av1_dc_quant_QTX(cm->quant_params.base_qindex, 0,
+#if CONFIG_EXTQUANT
+                               cm->seq_params.base_y_dc_delta_q,
+#endif  // CONFIG_EXTQUANT
                                cm->seq_params.bit_depth);
   int64_t rdmult = 0;
 
   switch (cm->seq_params.bit_depth) {
-    case AOM_BITS_8: rdmult = (int)((88 * q * q / beta) / 24); break;
-    case AOM_BITS_10:
-      rdmult = ROUND_POWER_OF_TWO((int)((88 * q * q / beta) / 24), 4);
+    case AOM_BITS_8:
+#if CONFIG_EXTQUANT
+      rdmult = ROUND_POWER_OF_TWO_64(
+          (int64_t)((RDMULT_FROM_Q2_NUM * (double)q * q / beta) /
+                    RDMULT_FROM_Q2_DEN),
+          2 * QUANT_TABLE_BITS);
+#else
+      rdmult = (int)((88 * q * q / beta) / 24);
+#endif
       break;
-    default:
-      assert(cm->seq_params.bit_depth == AOM_BITS_12);
+    case AOM_BITS_10:
+#if CONFIG_EXTQUANT
+      rdmult = ROUND_POWER_OF_TWO_64(
+          (int64_t)((RDMULT_FROM_Q2_NUM * (double)q * q / beta) /
+                    RDMULT_FROM_Q2_DEN),
+          4 + 2 * QUANT_TABLE_BITS);
+#else
+      rdmult = ROUND_POWER_OF_TWO((int)((88 * q * q / beta) / 24), 4);
+#endif
+      break;
+    case AOM_BITS_12:
+    default: assert(cm->seq_params.bit_depth == AOM_BITS_12);
+#if CONFIG_EXTQUANT
+      rdmult = ROUND_POWER_OF_TWO_64(
+          (int64_t)((RDMULT_FROM_Q2_NUM * (double)q * q / beta) /
+                    RDMULT_FROM_Q2_DEN),
+          8 + 2 * QUANT_TABLE_BITS);
+#else
       rdmult = ROUND_POWER_OF_TWO((int)((88 * q * q / beta) / 24), 8);
+#endif
       break;
   }
 
@@ -462,22 +607,48 @@ int av1_get_adaptive_rdmult(const AV1_COMP *cpi, double beta) {
   return (int)rdmult;
 }
 
-static int compute_rd_thresh_factor(int qindex, aom_bit_depth_t bit_depth) {
+static int compute_rd_thresh_factor(int qindex,
+#if CONFIG_EXTQUANT
+                                    int base_y_dc_delta_q,
+#endif  // CONFIG_EXTQUANT
+                                    aom_bit_depth_t bit_depth) {
   double q;
   switch (bit_depth) {
-    case AOM_BITS_8: q = av1_dc_quant_QTX(qindex, 0, AOM_BITS_8) / 4.0; break;
+    case AOM_BITS_8:
+      q = av1_dc_quant_QTX(qindex, 0,
+#if CONFIG_EXTQUANT
+                           base_y_dc_delta_q,
+#endif  // CONFIG_EXTQUANT
+                           AOM_BITS_8) /
+          4.0;
+      break;
     case AOM_BITS_10:
-      q = av1_dc_quant_QTX(qindex, 0, AOM_BITS_10) / 16.0;
+      q = av1_dc_quant_QTX(qindex, 0,
+#if CONFIG_EXTQUANT
+                           base_y_dc_delta_q,
+#endif  // CONFIG_EXTQUANT
+                           AOM_BITS_10) /
+          16.0;
       break;
     case AOM_BITS_12:
-      q = av1_dc_quant_QTX(qindex, 0, AOM_BITS_12) / 64.0;
+      q = av1_dc_quant_QTX(qindex, 0,
+#if CONFIG_EXTQUANT
+                           base_y_dc_delta_q,
+#endif  // CONFIG_EXTQUANT
+                           AOM_BITS_12) /
+          64.0;
       break;
     default:
       assert(0 && "bit_depth should be AOM_BITS_8, AOM_BITS_10 or AOM_BITS_12");
       return -1;
   }
-  // TODO(debargha): Adjust the function below.
+    // TODO(debargha): Adjust the function below.
+#if CONFIG_EXTQUANT
+  q /= (1 << QUANT_TABLE_BITS);
+  return AOMMAX((int)(pow(q, RD_THRESH_POW) * RD_THRESH_MUL), 8);
+#else
   return AOMMAX((int)(pow(q, RD_THRESH_POW) * 5.12), 8);
+#endif
 }
 
 void av1_set_sad_per_bit(const AV1_COMP *cpi, MvCosts *mv_costs, int qindex) {
@@ -494,11 +665,27 @@ static void set_block_thresholds(const AV1_COMMON *cm, RD_OPT *rd) {
   int i, bsize, segment_id;
 
   for (segment_id = 0; segment_id < MAX_SEGMENTS; ++segment_id) {
+#if CONFIG_EXTQUANT
+    const int qindex = clamp(
+        av1_get_qindex(&cm->seg, segment_id, cm->quant_params.base_qindex,
+                       cm->seq_params.bit_depth) +
+            cm->quant_params.y_dc_delta_q,
+        0,
+        cm->seq_params.bit_depth == AOM_BITS_8
+            ? MAXQ_8_BITS
+            : cm->seq_params.bit_depth == AOM_BITS_10 ? MAXQ_10_BITS : MAXQ);
+#else
     const int qindex = clamp(
         av1_get_qindex(&cm->seg, segment_id, cm->quant_params.base_qindex) +
             cm->quant_params.y_dc_delta_q,
         0, MAXQ);
-    const int q = compute_rd_thresh_factor(qindex, cm->seq_params.bit_depth);
+#endif
+
+    const int q = compute_rd_thresh_factor(qindex,
+#if CONFIG_EXTQUANT
+                                           cm->seq_params.base_y_dc_delta_q,
+#endif  // CONFIG_EXTQUANT
+                                           cm->seq_params.bit_depth);
 
     for (bsize = 0; bsize < BLOCK_SIZES_ALL; ++bsize) {
       // Threshold here seems unnecessarily harsh but fine given actual
@@ -640,14 +827,12 @@ void av1_initialize_rd_consts(AV1_COMP *cpi) {
 
   set_block_thresholds(cm, rd);
 
-  if ((!cpi->sf.rt_sf.use_nonrd_pick_mode &&
-       cpi->oxcf.cost_upd_freq.mv != COST_UPD_OFF) ||
-      frame_is_intra_only(cm) || (cm->current_frame.frame_number & 0x07) == 1)
+  if ((cpi->oxcf.cost_upd_freq.mv != COST_UPD_OFF) || frame_is_intra_only(cm) ||
+      (cm->current_frame.frame_number & 0x07) == 1)
     av1_fill_mv_costs(cm->fc, cm->features.cur_frame_force_integer_mv,
                       cm->features.allow_high_precision_mv, mv_costs);
 
-  if (!cpi->sf.rt_sf.use_nonrd_pick_mode && frame_is_intra_only(cm) &&
-      cm->features.allow_screen_content_tools &&
+  if (frame_is_intra_only(cm) && cm->features.allow_screen_content_tools &&
       !is_stat_generation_stage(cpi)) {
     IntraBCMVCosts *const dv_costs = &cpi->dv_costs;
     int *dvcost[2] = { &dv_costs->mv_component[0][MV_MAX],
@@ -1141,6 +1326,7 @@ void av1_set_rd_speed_thresholds(AV1_COMP *cpi) {
   // Set baseline threshold values.
   av1_zero(rd->thresh_mult);
 
+#if !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_NEARESTMV] = 300;
   rd->thresh_mult[THR_NEARESTL2] = 300;
   rd->thresh_mult[THR_NEARESTL3] = 300;
@@ -1156,6 +1342,25 @@ void av1_set_rd_speed_thresholds(AV1_COMP *cpi) {
   rd->thresh_mult[THR_NEWA2] = 1100;
   rd->thresh_mult[THR_NEWA] = 1000;
   rd->thresh_mult[THR_NEWG] = 1000;
+#endif  // !CONFIG_NEW_INTER_MODES
+
+#if CONFIG_NEW_INTER_MODES
+  rd->thresh_mult[THR_NEARMV] = 0;
+  rd->thresh_mult[THR_NEARL2] = 0;
+  rd->thresh_mult[THR_NEARL3] = 100;
+  rd->thresh_mult[THR_NEARB] = 0;
+  rd->thresh_mult[THR_NEARA2] = 0;
+  rd->thresh_mult[THR_NEARA] = 0;
+  rd->thresh_mult[THR_NEARG] = 0;
+#else
+  rd->thresh_mult[THR_NEARMV] = 1000;
+  rd->thresh_mult[THR_NEARL2] = 1000;
+  rd->thresh_mult[THR_NEARL3] = 1000;
+  rd->thresh_mult[THR_NEARB] = 1000;
+  rd->thresh_mult[THR_NEARA2] = 1000;
+  rd->thresh_mult[THR_NEARA] = 1000;
+  rd->thresh_mult[THR_NEARG] = 1000;
+#endif  // CONFIG_NEW_INTER_MODES
 
   rd->thresh_mult[THR_NEARMV] = 1000;
   rd->thresh_mult[THR_NEARL2] = 1000;
@@ -1173,6 +1378,7 @@ void av1_set_rd_speed_thresholds(AV1_COMP *cpi) {
   rd->thresh_mult[THR_GLOBALG] = 2000;
   rd->thresh_mult[THR_GLOBALA] = 2400;
 
+#if !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_COMP_NEAREST_NEARESTLA] = 1100;
   rd->thresh_mult[THR_COMP_NEAREST_NEARESTL2A] = 1000;
   rd->thresh_mult[THR_COMP_NEAREST_NEARESTL3A] = 800;
@@ -1190,130 +1396,164 @@ void av1_set_rd_speed_thresholds(AV1_COMP *cpi) {
   rd->thresh_mult[THR_COMP_NEAREST_NEARESTLL3] = 2000;
   rd->thresh_mult[THR_COMP_NEAREST_NEARESTLG] = 2000;
   rd->thresh_mult[THR_COMP_NEAREST_NEARESTBA] = 2000;
+#endif  // !CONFIG_NEW_INTER_MODES
 
   rd->thresh_mult[THR_COMP_NEAR_NEARLA] = 1200;
+#if !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_COMP_NEAREST_NEWLA] = 1500;
   rd->thresh_mult[THR_COMP_NEW_NEARESTLA] = 1500;
+#endif  // !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_COMP_NEAR_NEWLA] = 1530;
   rd->thresh_mult[THR_COMP_NEW_NEARLA] = 1870;
   rd->thresh_mult[THR_COMP_NEW_NEWLA] = 2400;
   rd->thresh_mult[THR_COMP_GLOBAL_GLOBALLA] = 2750;
 
   rd->thresh_mult[THR_COMP_NEAR_NEARL2A] = 1200;
+#if !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_COMP_NEAREST_NEWL2A] = 1500;
   rd->thresh_mult[THR_COMP_NEW_NEARESTL2A] = 1500;
+#endif  // !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_COMP_NEAR_NEWL2A] = 1870;
   rd->thresh_mult[THR_COMP_NEW_NEARL2A] = 1700;
   rd->thresh_mult[THR_COMP_NEW_NEWL2A] = 1800;
   rd->thresh_mult[THR_COMP_GLOBAL_GLOBALL2A] = 2500;
 
   rd->thresh_mult[THR_COMP_NEAR_NEARL3A] = 1200;
+#if !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_COMP_NEAREST_NEWL3A] = 1500;
   rd->thresh_mult[THR_COMP_NEW_NEARESTL3A] = 1500;
+#endif  // !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_COMP_NEAR_NEWL3A] = 1700;
   rd->thresh_mult[THR_COMP_NEW_NEARL3A] = 1700;
   rd->thresh_mult[THR_COMP_NEW_NEWL3A] = 2000;
   rd->thresh_mult[THR_COMP_GLOBAL_GLOBALL3A] = 3000;
 
   rd->thresh_mult[THR_COMP_NEAR_NEARGA] = 1320;
+#if !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_COMP_NEAREST_NEWGA] = 1500;
   rd->thresh_mult[THR_COMP_NEW_NEARESTGA] = 1500;
+#endif  // !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_COMP_NEAR_NEWGA] = 2040;
   rd->thresh_mult[THR_COMP_NEW_NEARGA] = 1700;
   rd->thresh_mult[THR_COMP_NEW_NEWGA] = 2000;
   rd->thresh_mult[THR_COMP_GLOBAL_GLOBALGA] = 2250;
 
   rd->thresh_mult[THR_COMP_NEAR_NEARLB] = 1200;
+#if !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_COMP_NEAREST_NEWLB] = 1500;
   rd->thresh_mult[THR_COMP_NEW_NEARESTLB] = 1500;
+#endif  // !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_COMP_NEAR_NEWLB] = 1360;
   rd->thresh_mult[THR_COMP_NEW_NEARLB] = 1700;
   rd->thresh_mult[THR_COMP_NEW_NEWLB] = 2400;
   rd->thresh_mult[THR_COMP_GLOBAL_GLOBALLB] = 2250;
 
   rd->thresh_mult[THR_COMP_NEAR_NEARL2B] = 1200;
+#if !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_COMP_NEAREST_NEWL2B] = 1500;
   rd->thresh_mult[THR_COMP_NEW_NEARESTL2B] = 1500;
+#endif  // !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_COMP_NEAR_NEWL2B] = 1700;
   rd->thresh_mult[THR_COMP_NEW_NEARL2B] = 1700;
   rd->thresh_mult[THR_COMP_NEW_NEWL2B] = 2000;
   rd->thresh_mult[THR_COMP_GLOBAL_GLOBALL2B] = 2500;
 
   rd->thresh_mult[THR_COMP_NEAR_NEARL3B] = 1200;
+#if !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_COMP_NEAREST_NEWL3B] = 1500;
   rd->thresh_mult[THR_COMP_NEW_NEARESTL3B] = 1500;
+#endif  // !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_COMP_NEAR_NEWL3B] = 1870;
   rd->thresh_mult[THR_COMP_NEW_NEARL3B] = 1700;
   rd->thresh_mult[THR_COMP_NEW_NEWL3B] = 2000;
   rd->thresh_mult[THR_COMP_GLOBAL_GLOBALL3B] = 2500;
 
   rd->thresh_mult[THR_COMP_NEAR_NEARGB] = 1200;
+#if !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_COMP_NEAREST_NEWGB] = 1500;
   rd->thresh_mult[THR_COMP_NEW_NEARESTGB] = 1500;
+#endif  // !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_COMP_NEAR_NEWGB] = 1700;
   rd->thresh_mult[THR_COMP_NEW_NEARGB] = 1700;
   rd->thresh_mult[THR_COMP_NEW_NEWGB] = 2000;
   rd->thresh_mult[THR_COMP_GLOBAL_GLOBALGB] = 2500;
 
   rd->thresh_mult[THR_COMP_NEAR_NEARLA2] = 1200;
+#if !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_COMP_NEAREST_NEWLA2] = 1800;
   rd->thresh_mult[THR_COMP_NEW_NEARESTLA2] = 1500;
+#endif  // !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_COMP_NEAR_NEWLA2] = 1700;
   rd->thresh_mult[THR_COMP_NEW_NEARLA2] = 1700;
   rd->thresh_mult[THR_COMP_NEW_NEWLA2] = 2000;
   rd->thresh_mult[THR_COMP_GLOBAL_GLOBALLA2] = 2500;
 
   rd->thresh_mult[THR_COMP_NEAR_NEARL2A2] = 1200;
+#if !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_COMP_NEAREST_NEWL2A2] = 1500;
   rd->thresh_mult[THR_COMP_NEW_NEARESTL2A2] = 1500;
+#endif  // !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_COMP_NEAR_NEWL2A2] = 1700;
   rd->thresh_mult[THR_COMP_NEW_NEARL2A2] = 1700;
   rd->thresh_mult[THR_COMP_NEW_NEWL2A2] = 2000;
   rd->thresh_mult[THR_COMP_GLOBAL_GLOBALL2A2] = 2500;
 
   rd->thresh_mult[THR_COMP_NEAR_NEARL3A2] = 1440;
+#if !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_COMP_NEAREST_NEWL3A2] = 1500;
   rd->thresh_mult[THR_COMP_NEW_NEARESTL3A2] = 1500;
+#endif  // !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_COMP_NEAR_NEWL3A2] = 1700;
   rd->thresh_mult[THR_COMP_NEW_NEARL3A2] = 1700;
   rd->thresh_mult[THR_COMP_NEW_NEWL3A2] = 2000;
   rd->thresh_mult[THR_COMP_GLOBAL_GLOBALL3A2] = 2500;
 
   rd->thresh_mult[THR_COMP_NEAR_NEARGA2] = 1200;
+#if !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_COMP_NEAREST_NEWGA2] = 1500;
   rd->thresh_mult[THR_COMP_NEW_NEARESTGA2] = 1500;
+#endif  // !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_COMP_NEAR_NEWGA2] = 1700;
   rd->thresh_mult[THR_COMP_NEW_NEARGA2] = 1700;
   rd->thresh_mult[THR_COMP_NEW_NEWGA2] = 2000;
   rd->thresh_mult[THR_COMP_GLOBAL_GLOBALGA2] = 2750;
 
   rd->thresh_mult[THR_COMP_NEAR_NEARLL2] = 1600;
+#if !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_COMP_NEAREST_NEWLL2] = 2000;
   rd->thresh_mult[THR_COMP_NEW_NEARESTLL2] = 2000;
+#endif  // !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_COMP_NEAR_NEWLL2] = 2640;
   rd->thresh_mult[THR_COMP_NEW_NEARLL2] = 2200;
   rd->thresh_mult[THR_COMP_NEW_NEWLL2] = 2400;
   rd->thresh_mult[THR_COMP_GLOBAL_GLOBALLL2] = 3200;
 
   rd->thresh_mult[THR_COMP_NEAR_NEARLL3] = 1600;
+#if !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_COMP_NEAREST_NEWLL3] = 2000;
   rd->thresh_mult[THR_COMP_NEW_NEARESTLL3] = 1800;
+#endif  // !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_COMP_NEAR_NEWLL3] = 2200;
   rd->thresh_mult[THR_COMP_NEW_NEARLL3] = 2200;
   rd->thresh_mult[THR_COMP_NEW_NEWLL3] = 2400;
   rd->thresh_mult[THR_COMP_GLOBAL_GLOBALLL3] = 3200;
 
   rd->thresh_mult[THR_COMP_NEAR_NEARLG] = 1760;
+#if !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_COMP_NEAREST_NEWLG] = 2400;
   rd->thresh_mult[THR_COMP_NEW_NEARESTLG] = 2000;
+#endif  // !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_COMP_NEAR_NEWLG] = 1760;
   rd->thresh_mult[THR_COMP_NEW_NEARLG] = 2640;
   rd->thresh_mult[THR_COMP_NEW_NEWLG] = 2400;
   rd->thresh_mult[THR_COMP_GLOBAL_GLOBALLG] = 3200;
 
   rd->thresh_mult[THR_COMP_NEAR_NEARBA] = 1600;
+#if !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_COMP_NEAREST_NEWBA] = 2000;
   rd->thresh_mult[THR_COMP_NEW_NEARESTBA] = 2000;
+
+#endif  // !CONFIG_NEW_INTER_MODES
   rd->thresh_mult[THR_COMP_NEAR_NEWBA] = 2200;
   rd->thresh_mult[THR_COMP_NEW_NEARBA] = 1980;
   rd->thresh_mult[THR_COMP_NEW_NEWBA] = 2640;
@@ -1366,13 +1606,44 @@ void av1_update_rd_thresh_fact(const AV1_COMMON *const cm,
   }
 }
 
+#if CONFIG_EXTQUANT
+#define INTRA_COST_PENALTY_Q_FACTOR 8
+#else
+#define INTRA_COST_PENALTY_Q_FACTOR 20
+#endif  // CONFIG_EXTQUANT
+
 int av1_get_intra_cost_penalty(int qindex, int qdelta,
+#if CONFIG_EXTQUANT
+                               int base_y_dc_delta_q,
+#endif  // CONFIG_EXTQUANT
                                aom_bit_depth_t bit_depth) {
-  const int q = av1_dc_quant_QTX(qindex, qdelta, bit_depth);
+  const int q = av1_dc_quant_QTX(qindex, qdelta,
+#if CONFIG_EXTQUANT
+                                 base_y_dc_delta_q,
+#endif  // CONFIG_EXTQUANT
+                                 bit_depth);
   switch (bit_depth) {
-    case AOM_BITS_8: return 20 * q;
-    case AOM_BITS_10: return 5 * q;
-    case AOM_BITS_12: return ROUND_POWER_OF_TWO(5 * q, 2);
+    case AOM_BITS_8:
+#if CONFIG_EXTQUANT
+      return ROUND_POWER_OF_TWO(INTRA_COST_PENALTY_Q_FACTOR * q,
+                                0 + QUANT_TABLE_BITS);
+#else
+      return 20 * q;
+#endif
+    case AOM_BITS_10:
+#if CONFIG_EXTQUANT
+      return ROUND_POWER_OF_TWO(INTRA_COST_PENALTY_Q_FACTOR * q,
+                                2 + QUANT_TABLE_BITS);
+#else
+      return 5 * q;
+#endif
+    case AOM_BITS_12:
+#if CONFIG_EXTQUANT
+      return ROUND_POWER_OF_TWO(INTRA_COST_PENALTY_Q_FACTOR * q,
+                                4 + QUANT_TABLE_BITS);
+#else
+      return ROUND_POWER_OF_TWO(5 * q, 2);
+#endif
     default:
       assert(0 && "bit_depth should be AOM_BITS_8, AOM_BITS_10 or AOM_BITS_12");
       return -1;

@@ -25,7 +25,7 @@ typedef struct {
 } FwdKfTestParam;
 
 const FwdKfTestParam kTestParams[] = {
-  { 4, 31.1 },  { 6, 31.5 },  { 8, 32.6 },
+  { 4, 31.1 },  { 6, 31.1 },  { 8, 32.6 },
   { 12, 31.7 }, { 16, 32.3 }, { 18, 32.1 }
 };
 
@@ -58,6 +58,9 @@ class ForwardKeyTest
     cfg_.fwd_kf_enabled = 1;
     cfg_.kf_max_dist = kf_max_dist_;
     cfg_.g_threads = 0;
+#if CONFIG_EXTQUANT
+    cfg_.rc_max_quantizer = 200;
+#endif  // CONFIG_EXTQUANT
     init_flags_ = AOM_CODEC_USE_PSNR;
   }
 
@@ -75,11 +78,9 @@ class ForwardKeyTest
                                   ::libaom_test::Encoder *encoder) {
     if (video->frame() == 0) {
       encoder->Control(AOME_SET_CPUUSED, cpu_used_);
-      if (encoding_mode_ != ::libaom_test::kRealTime) {
-        encoder->Control(AOME_SET_ENABLEAUTOALTREF, 1);
-        encoder->Control(AOME_SET_ARNR_MAXFRAMES, 7);
-        encoder->Control(AOME_SET_ARNR_STRENGTH, 5);
-      }
+      encoder->Control(AOME_SET_ENABLEAUTOALTREF, 1);
+      encoder->Control(AOME_SET_ARNR_MAXFRAMES, 7);
+      encoder->Control(AOME_SET_ARNR_STRENGTH, 5);
     }
   }
 
@@ -110,7 +111,7 @@ TEST_P(ForwardKeyTest, ForwardKeyEncodeTest) {
       << "kf max dist = " << kf_max_dist_;
 }
 
-AV1_INSTANTIATE_TEST_SUITE(ForwardKeyTest, NONREALTIME_TEST_MODES,
+AV1_INSTANTIATE_TEST_SUITE(ForwardKeyTest, GOODQUALITY_TEST_MODES,
                            ::testing::ValuesIn(kTestParams));
 
 typedef struct {
@@ -149,6 +150,9 @@ class ForwardKeyPresenceTestLarge
     cfg_.kf_max_dist = kf_dist_param_.max_kf_dist;
     cfg_.fwd_kf_enabled = 1;
     cfg_.g_lag_in_frames = 19;
+#if CONFIG_EXTQUANT
+    cfg_.rc_max_quantizer = 200;
+#endif  // CONFIG_EXTQUANT
   }
 
   virtual bool DoDecode() const { return 1; }
@@ -187,7 +191,7 @@ TEST_P(ForwardKeyPresenceTestLarge, ForwardKeyEncodePresenceTest) {
   ASSERT_EQ(is_fwd_kf_present_, 1);
 }
 
-AV1_INSTANTIATE_TEST_SUITE(ForwardKeyPresenceTestLarge, NONREALTIME_TEST_MODES,
+AV1_INSTANTIATE_TEST_SUITE(ForwardKeyPresenceTestLarge, GOODQUALITY_TEST_MODES,
                            ::testing::ValuesIn(kfTestParams),
                            ::testing::Values(AOM_Q, AOM_VBR, AOM_CBR, AOM_CQ));
 }  // namespace

@@ -154,7 +154,6 @@ const av1_codec_arg_definitions_t g_av1_codec_arg_defs = {
   .step = ARG_DEF(NULL, "step", 1,
                   "Encode every n-th frame (after the --skip frames)"),
   .good_dl = ARG_DEF(NULL, "good", 0, "Use Good Quality Deadline"),
-  .rt_dl = ARG_DEF(NULL, "rt", 0, "Use Realtime Quality Deadline"),
   .quietarg = ARG_DEF("q", "quiet", 0, "Do not print encode progress"),
   .verbosearg = ARG_DEF("v", "verbose", 0, "Show encoder parameters"),
   .psnrarg = ARG_DEF(NULL, "psnr", 0, "Show PSNR in status line"),
@@ -239,12 +238,16 @@ const av1_codec_arg_definitions_t g_av1_codec_arg_defs = {
   .target_bitrate = ARG_DEF(NULL, "target-bitrate", 1, "Bitrate (kbps)"),
   .min_q_level =
       ARG_DEF(NULL, "min-q", 1,
-              "Minimum (best) quantizer in range 0 to 63 (DEPRECATED)"),
+              "Minimum (best) quantizer in range [0, 63] (DEPRECATED)"),
   .max_q_level =
       ARG_DEF(NULL, "max-q", 1,
-              "Maximum (worst) quantizer in range 0 to 63 (DEPRECATED)"),
-  .min_qp_level = ARG_DEF(NULL, "min-qp", 1, "Minimum (best) quantizer"),
-  .max_qp_level = ARG_DEF(NULL, "max-qp", 1, "Maximum (worst) quantizer"),
+              "Maximum (worst) quantizer in range [0, 63] (DEPRECATED)"),
+  .min_qp_level = ARG_DEF(NULL, "min-qp", 1,
+                          "Minimum (best) quantizer in range [M, 255], "
+                          "where M = 0/-48/-96 for 8/10/12 bit"),
+  .max_qp_level = ARG_DEF(NULL, "max-qp", 1,
+                          "Maximum (worst) quantizer in range [M, 255], "
+                          "where M = 0/-48/-96 for 8/10/12 bit"),
   .undershoot_pct = ARG_DEF(NULL, "undershoot-pct", 1,
                             "Datarate undershoot (min) target (%)"),
   .overshoot_pct =
@@ -284,14 +287,15 @@ const av1_codec_arg_definitions_t g_av1_codec_arg_defs = {
                               tuning_enum),
   .cq_level = ARG_DEF(
       NULL, "cq-level", 1,
-      "Constant/Constrained Quality level in range 0 to 63 (DEPRECATED)"),
-  .qp_level = ARG_DEF(NULL, "qp", 1, "Constant/Constrained Quality level"),
+      "Constant/Constrained Quality level in range [0, 63] (DEPRECATED)"),
+  .qp_level = ARG_DEF(NULL, "qp", 1,
+                      "Constant/Constrained Quality level "
+                      "in range [M, 255], where M = 0/-48/-96 for 8/10/12 bit"),
   .max_intra_rate_pct =
       ARG_DEF(NULL, "max-intra-rate", 1, "Max I-frame bitrate (pct)"),
 #if CONFIG_AV1_ENCODER
   .cpu_used_av1 =
-      ARG_DEF(NULL, "cpu-used", 1,
-              "Speed setting (0..6 in good mode, 6..9 in realtime mode)"),
+      ARG_DEF(NULL, "cpu-used", 1, "Speed setting (0..6 in good mode"),
   .rowmtarg =
       ARG_DEF(NULL, "row-mt", 1,
               "Enable row based multi-threading (0: off, 1: on (default))"),
@@ -322,9 +326,17 @@ const av1_codec_arg_definitions_t g_av1_codec_arg_defs = {
       "Enable the constrained directional enhancement filter (0: false, "
       "1: true (default))"),
   .enable_restoration = ARG_DEF(NULL, "enable-restoration", 1,
-                                "Enable the loop restoration filter (0: false "
-                                "(default in Realtime mode), "
-                                "1: true (default in Non-realtime mode))"),
+                                "Enable the loop restoration filter (0: false, "
+                                "1: true (default))"),
+#if CONFIG_CCSO
+  .enable_ccso = ARG_DEF(NULL, "enable-ccso", 1,
+                         "Enable cross component sample offset (0: false "
+                         "1: true)"),
+#endif
+  .disable_ml_partition_speed_features =
+      ARG_DEF(NULL, "disable-ml-partition-speed-features", 1,
+              "Disable ML partition speed features "
+              "(0: false (default), 1: true)"),
   .enable_rect_partitions = ARG_DEF(NULL, "enable-rect-partitions", 1,
                                     "Enable rectangular partitions "
                                     "(0: false, 1: true (default))"),
@@ -334,17 +346,31 @@ const av1_codec_arg_definitions_t g_av1_codec_arg_defs = {
   .enable_1to4_partitions = ARG_DEF(NULL, "enable-1to4-partitions", 1,
                                     "Enable 1:4 and 4:1 partitions "
                                     "(0: false, 1: true (default))"),
+  .disable_ml_transform_speed_features =
+      ARG_DEF(NULL, "disable-ml-transform-speed-features", 1,
+              "Disable ML transform speed features "
+              "(0: false (default), 1: true)"),
 #if CONFIG_SDP
   .enable_sdp = ARG_DEF(NULL, "enable-sdp", 1,
                         "Enable semi decoupled partitioning for key frame"
                         "(0: false, 1: true (default))"),
 #endif
-#if CONFIG_EXT_RECUR_PARTITIONS
-  .disable_ml_partition_speed_features =
-      ARG_DEF(NULL, "disable_ml_partition_speed_features", 1,
-              "Disable ML models used for fast partititoning"
+#if CONFIG_MRLS
+  .enable_mrls =
+      ARG_DEF(NULL, "enable-mrls", 1,
+              "Enable multiple reference line selection for intra prediction"
               "(0: false, 1: true (default))"),
-#endif  // CONFIG_EXT_RECUR_PARTITIONS
+#endif
+#if CONFIG_ORIP
+  .enable_orip = ARG_DEF(NULL, "enable-orip", 1,
+                         "Enable Offset Based refinement of intra prediction"
+                         "(0: false, 1: true (default))"),
+#endif
+#if CONFIG_IST
+  .enable_ist = ARG_DEF(NULL, "enable-ist", 1,
+                        "Enable intra secondary transform"
+                        "(0: false, 1: true (default))"),
+#endif
   .min_partition_size =
       ARG_DEF(NULL, "min-partition-size", 1,
               "Set min partition size "
@@ -604,9 +630,11 @@ const av1_codec_arg_definitions_t g_av1_codec_arg_defs = {
       ARG_DEF(NULL, "use-fixed-qp-offsets", 1,
               "Enable fixed QP offsets for frames at different levels of the "
               "pyramid. Selected automatically from --qp if "
-              "--fixed-qp-offsets is not provided. If this option is not "
+              "--fixed-qp-offsets is not specified. If this option is not "
               "specified (default), offsets are adaptively chosen by the "
-              "encoder."),
+              "encoder. Further, if this option is specified, at least two "
+              "comma-separated values corresponding to kf and arf offsets "
+              "must be provided, while the rest are chosen by the encoder"),
 
   .fixed_qp_offsets = ARG_DEF(
       NULL, "fixed-qp-offsets", 1,
@@ -633,6 +661,14 @@ const av1_codec_arg_definitions_t g_av1_codec_arg_defs = {
       "Set specified SubGOP configurations in config file path provided "
       "for various SubGOP lengths. "
       "If this option is not specified (default), the configurations "
-      "are chosen by the encoder using a default algorithm.")
+      "are chosen by the encoder using a default algorithm."),
+
+#if CONFIG_NEW_INTER_MODES
+  .max_drl_refmvs =
+      ARG_DEF(NULL, "max-drl-refmvs", 1,
+              "maximum number of drl reference MVs per reference. "
+              "(0 (auto), 2-8 (fixed)) default is 0 (auto)."),
+#endif  // CONFIG_NEW_INTER_MODES
+
 #endif  // CONFIG_AV1_ENCODER
 };

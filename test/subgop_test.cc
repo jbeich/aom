@@ -86,6 +86,7 @@ typedef struct {
   int frame_h;
   int cpu_used;
   int lag_in_frames;
+  int use_fixed_qp_offsets;
 } SubgopTestParams;
 
 int is_extension_y4m(const char *filename) {
@@ -99,61 +100,69 @@ int is_extension_y4m(const char *filename) {
 static const SubgopTestParams SubGopTestVectors[] = {
   // Default subgop config
   { subgop_config_str_preset_map[DEFAULT].preset_tag,
-    "hantro_collage_w352h288.yuv", 0, 16, 352, 288, 3, 35 },
+    "hantro_collage_w352h288.yuv", 0, 16, 352, 288, 3, 35, 0 },
   { subgop_config_str_preset_map[DEFAULT].preset_tag, "desktop1.320_180.yuv", 0,
-    16, 320, 180, 5, 35 },
+    16, 320, 180, 5, 35, 0 },
   { subgop_config_str_preset_map[DEFAULT].preset_tag,
-    "pixel_capture_w320h240.yuv", 0, 16, 320, 240, 3, 35 },
+    "pixel_capture_w320h240.yuv", 16, 16, 320, 240, 3, 35, 1 },
+  { subgop_config_str_preset_map[DEFAULT].preset_tag,
+    "hantro_collage_w352h288.yuv", 0, 32, 352, 288, 3, 35, 0 },
+  { subgop_config_str_preset_map[DEFAULT].preset_tag,
+    "pixel_capture_w320h240.yuv", 32, 32, 320, 240, 3, 35, 1 },
 
   // Enhanced subgop config
   { subgop_config_str_preset_map[ENHANCE].preset_tag, "niklas_640_480_30.yuv",
-    0, 15, 640, 480, 5, 35 },
+    0, 15, 640, 480, 5, 35, 0 },
   { subgop_config_str_preset_map[ENHANCE].preset_tag, "paris_352_288_30.y4m", 0,
-    6, 352, 288, 3, 35 },
+    6, 352, 288, 3, 35, 0 },
   { subgop_config_str_preset_map[ENHANCE].preset_tag,
-    "hantro_collage_w352h288.yuv", 0, 16, 352, 288, 3, 35 },
+    "hantro_collage_w352h288.yuv", 0, 16, 352, 288, 3, 35, 0 },
   { subgop_config_str_preset_map[ENHANCE].preset_tag,
-    "pixel_capture_w320h240.yuv", 0, 12, 320, 240, 3, 35 },
+    "pixel_capture_w320h240.yuv", 0, 12, 320, 240, 3, 35, 0 },
   { subgop_config_str_preset_map[ENHANCE].preset_tag, "niklas_1280_720_30.y4m",
-    0, 11, 1280, 720, 5, 35 },
+    0, 11, 1280, 720, 5, 35, 0 },
   { subgop_config_str_preset_map[ENHANCE].preset_tag, "screendata.y4m", 0, 16,
-    640, 480, 5, 35 },
+    640, 480, 5, 35, 0 },
   { subgop_config_str_preset_map[ENHANCE].preset_tag,
-    "pixel_capture_w320h240.yuv", 0, 14, 320, 240, 3, 35 },
+    "pixel_capture_w320h240.yuv", 0, 14, 320, 240, 3, 35, 0 },
   { subgop_config_str_preset_map[ENHANCE].preset_tag, "desktop1.320_180.yuv", 0,
-    10, 320, 180, 3, 35 },
+    10, 320, 180, 3, 35, 0 },
   { subgop_config_str_preset_map[ENHANCE].preset_tag, "paris_352_288_30.y4m", 0,
-    13, 352, 288, 5, 35 },
+    13, 352, 288, 5, 35, 0 },
   { subgop_config_str_preset_map[ENHANCE].preset_tag,
-    "pixel_capture_w320h240.yuv", 0, 8, 320, 240, 5, 35 },
+    "pixel_capture_w320h240.yuv", 0, 8, 320, 240, 5, 35, 0 },
 
   // Asymmetric subgop config
   { subgop_config_str_preset_map[ASYMMETRIC].preset_tag,
-    "pixel_capture_w320h240.yuv", 0, 16, 320, 240, 5, 35 },
+    "pixel_capture_w320h240.yuv", 0, 16, 320, 240, 5, 35, 0 },
   { subgop_config_str_preset_map[ASYMMETRIC].preset_tag, "desktop1.320_180.yuv",
-    0, 16, 320, 180, 3, 35 },
+    0, 16, 320, 180, 3, 35, 0 },
 
   // Temporal scalable subgop config
   { subgop_config_str_preset_map[TEMPORAL_SCALABLE].preset_tag,
-    "pixel_capture_w320h240.yuv", 0, 16, 320, 240, 3, 35 },
+    "pixel_capture_w320h240.yuv", 0, 16, 320, 240, 3, 35, 0 },
   { subgop_config_str_preset_map[TEMPORAL_SCALABLE].preset_tag,
-    "hantro_collage_w352h288.yuv", 0, 16, 352, 288, 5, 35 },
+    "hantro_collage_w352h288.yuv", 0, 16, 352, 288, 5, 35, 0 },
 
   // Low delay subgop config
   { subgop_config_str_preset_map[LOW_DELAY].preset_tag, "paris_352_288_30.y4m",
-    0, 16, 352, 288, 5, 0 },
+    0, 16, 352, 288, 5, 0, 0 },
   { subgop_config_str_preset_map[LOW_DELAY].preset_tag, "desktop1.320_180.yuv",
-    0, 16, 320, 180, 3, 0 },
+    16, 16, 320, 180, 3, 0, 1 },
+  { subgop_config_str_preset_map[LOW_DELAY].preset_tag, "paris_352_288_30.y4m",
+    0, 32, 352, 288, 5, 0, 0 },
+  { subgop_config_str_preset_map[LOW_DELAY].preset_tag, "desktop1.320_180.yuv",
+    32, 32, 320, 180, 3, 0, 1 },
 
   // Non-default subgop config
   { subgop_config_str_nondef[0], "pixel_capture_w320h240.yuv", 0, 4, 320, 240,
-    3, 35 },
-  { subgop_config_str_nondef[0], "desktop1.320_180.yuv", 0, 5, 320, 180, 5,
-    35 },
+    3, 35, 0 },
+  { subgop_config_str_nondef[0], "desktop1.320_180.yuv", 0, 5, 320, 180, 5, 35,
+    0 },
   { subgop_config_str_nondef[0], "pixel_capture_w320h240.yuv", 0, 7, 320, 240,
-    5, 35 },
+    5, 35, 0 },
   { subgop_config_str_nondef[0], "hantro_collage_w352h288.yuv", 0, 9, 352, 288,
-    3, 35 },
+    3, 35, 0 },
 };
 
 std::ostream &operator<<(std::ostream &os, const SubgopTestParams &test_arg) {
@@ -164,7 +173,9 @@ std::ostream &operator<<(std::ostream &os, const SubgopTestParams &test_arg) {
             << " frame_width:" << test_arg.frame_w
             << " frame_height:" << test_arg.frame_h
             << " cpu_used:" << test_arg.cpu_used
-            << " lag_in_frames:" << test_arg.lag_in_frames << " }";
+            << " lag_in_frames:" << test_arg.lag_in_frames
+            << " use_fixed_qp_offsets:" << test_arg.use_fixed_qp_offsets
+            << " }";
 }
 // This class is used to validate the subgop config in a gop.
 class SubGopTestLarge
@@ -185,11 +196,16 @@ class SubGopTestLarge
     cfg_.g_timebase = timebase;
     cfg_.g_threads = 1;
     cfg_.rc_end_usage = rc_end_usage_;
+    if (rc_end_usage_ == AOM_Q) {
+      cfg_.use_fixed_qp_offsets = subgop_test_params_.use_fixed_qp_offsets;
+    }
     // Note: kf_min_dist, kf_max_dist, g_lag_in_frames are configurable
     // parameters
     cfg_.kf_min_dist = 65;
     cfg_.kf_max_dist = 65;
     cfg_.g_lag_in_frames = subgop_test_params_.lag_in_frames;
+    // Note: Uncomment the following line for verbose output, to aid debugging.
+    // init_flags_ = AOM_CODEC_USE_PER_FRAME_STATS;
   }
 
   // check if subgop_config_str is a preset tag
@@ -210,6 +226,9 @@ class SubGopTestLarge
                                   ::libaom_test::Encoder *encoder) {
     if (video->frame() == 0) {
       encoder->Control(AOME_SET_CPUUSED, subgop_test_params_.cpu_used);
+      if (rc_end_usage_ == AOM_Q) {
+        encoder->Control(AOME_SET_QP, 128);
+      }
       encoder->Control(AV1E_ENABLE_SUBGOP_STATS, enable_subgop_stats_);
       GetSubGOPConfigStr();
       encoder->Control(AV1E_SET_SUBGOP_CONFIG_STR,
@@ -240,7 +259,6 @@ class SubGopTestLarge
     is_first_frame_in_subgop_key_ = 0;
     frames_from_key_ = 0;
     frame_num_ = 0;
-    // TODO(any): Extend this unit test for 'CONFIG_REALTIME_ONLY'
     enable_subgop_stats_ = 1;
     memset(&subgop_last_step_, 0, sizeof(subgop_last_step_));
   }
@@ -418,7 +436,7 @@ class SubGopTestLarge
     for (int idx = 0; idx < subgop_cfg_ref_->num_steps; idx++) {
       int8_t ref_pyramid_level =
           (subgop_cfg_ref_->step[idx].pyr_level == max_pyramid_level)
-              ? 6
+              ? MAX_ARF_LAYERS
               : subgop_cfg_ref_->step[idx].pyr_level;
       EXPECT_EQ(subgop_cfg_test_.step[idx].pyr_level, ref_pyramid_level)
           << "Error:pyramid level doesn't match";
@@ -427,11 +445,12 @@ class SubGopTestLarge
 
   // Validates Pyramid level along with qindex assignment
   void ValidatePyramidLevelQIndex() {
-    int level_qindex[REF_FRAMES] = { 0 };
-    int8_t pyramid_level;
+    int level_qindex[MAX_ARF_LAYERS + 1];
+    for (int i = 0; i <= MAX_ARF_LAYERS; i++) level_qindex[i] = -1;
+    int pyramid_level;
     for (int idx = 0; idx < subgop_cfg_ref_->num_steps; idx++) {
       pyramid_level = subgop_cfg_test_.step[idx].pyr_level;
-      if (!level_qindex[pyramid_level]) {
+      if (level_qindex[pyramid_level] < 0) {
         level_qindex[pyramid_level] = subgop_data_.step[idx].qindex;
       } else if (!subgop_data_.step[idx].show_existing_frame &&
                  !subgop_data_.step[idx].is_filtered) {
@@ -439,12 +458,11 @@ class SubGopTestLarge
             << "Error:qindex in a pyramid level doesn't match";
       }
     }
-    pyramid_level = 1;
-    for (int idx = 1; idx < REF_FRAMES; idx++) {
-      if (level_qindex[pyramid_level]) {
+    for (pyramid_level = 1; pyramid_level <= MAX_ARF_LAYERS; pyramid_level++) {
+      if (level_qindex[pyramid_level] >= 0) {
         EXPECT_LT(level_qindex[pyramid_level - 1], level_qindex[pyramid_level])
-            << "Error:qindex should be higher in hierarchical pyramid level";
-        pyramid_level++;
+            << "Error: level " << pyramid_level - 1 << " qindex "
+            << "should be less than level " << pyramid_level << " qindex";
       }
     }
   }
@@ -685,17 +703,17 @@ std::ostream &operator<<(std::ostream &os,
             << " lag_in_frames:" << test_arg.lag_in_frames << " }";
 }
 
-class SubGopPSNRCheckTest
+class SubGopPSNRCheckTestLarge
     : public ::libaom_test::CodecTestWith2Params<SubgopPsnrTestParams,
                                                  aom_rc_mode>,
       public ::libaom_test::EncoderTest {
  protected:
-  SubGopPSNRCheckTest()
+  SubGopPSNRCheckTestLarge()
       : EncoderTest(GET_PARAM(0)), test_params_(GET_PARAM(1)),
         rc_end_usage_(GET_PARAM(2)) {
     Reset();
   }
-  virtual ~SubGopPSNRCheckTest() {}
+  virtual ~SubGopPSNRCheckTestLarge() {}
 
   void Reset() {
     frame_num_ = 0;
@@ -740,10 +758,10 @@ class SubGopPSNRCheckTest
   unsigned int frame_num_;
 };
 
-TEST_P(SubGopPSNRCheckTest, SubGopPSNRCheck) {
+TEST_P(SubGopPSNRCheckTestLarge, SubGopPSNRCheck) {
   std::unique_ptr<libaom_test::VideoSource> video;
   const unsigned int kFrames = 100;
-  const double psnr_diff_thresh = 0.2;
+  const double psnr_diff_thresh = 0.3;
   if (is_extension_y4m(test_params_.input_file)) {
     video.reset(
         new libaom_test::Y4mVideoSource(test_params_.input_file, 0, kFrames));
@@ -768,7 +786,7 @@ TEST_P(SubGopPSNRCheckTest, SubGopPSNRCheck) {
 }
 
 // TODO(any) : Enable AOM_CBR after fix
-AV1_INSTANTIATE_TEST_SUITE(SubGopPSNRCheckTest,
+AV1_INSTANTIATE_TEST_SUITE(SubGopPSNRCheckTestLarge,
                            ::testing::ValuesIn(SubGopPsnrTestVectors),
                            ::testing::Values(AOM_Q, AOM_VBR,
                                              AOM_CQ /*, AOM_CBR*/));
@@ -780,30 +798,47 @@ typedef struct {
   int frame_h;
   int cpu_used;
   int lag_in_frames;
+  int max_gf_interval;
 } SubGopSwitchTestParams;
+
+std::ostream &operator<<(std::ostream &os,
+                         const SubGopSwitchTestParams &test_arg) {
+  return os << "SubGopSwitchTestParams { sub_gop_config:" << test_arg.subgop_str
+            << " source_file:" << test_arg.input_file
+            << " frame_width:" << test_arg.frame_w
+            << " frame_height:" << test_arg.frame_h
+            << " cpu_used:" << test_arg.cpu_used
+            << " lag_in_frames:" << test_arg.lag_in_frames
+            << " max_gf_interval:" << test_arg.max_gf_interval << " }";
+}
 
 static const SubGopSwitchTestParams SubgopSwitchTestVectors[] = {
   { subgop_config_str_preset_map[DEFAULT].preset_tag, "niklas_640_480_30.yuv",
-    640, 480, 5, 35 },
+    640, 480, 5, 35, 16 },
+  /* TODO(sarahparker/debargha): Enable after adding default 32 subgop config.
+   { subgop_config_str_preset_map[DEFAULT].preset_tag, "niklas_640_480_30.yuv",
+    640, 480, 5, 35, 32 },*/
   { subgop_config_str_preset_map[ENHANCE].preset_tag, "desktop1.320_180.yuv",
-    320, 180, 3, 35 },
+    320, 180, 3, 35, 16 },
   { subgop_config_str_preset_map[ENHANCE].preset_tag,
-    "hantro_collage_w352h288.yuv", 352, 288, 5, 35 },
+    "hantro_collage_w352h288.yuv", 352, 288, 5, 35, 16 },
   { subgop_config_str_preset_map[ASYMMETRIC].preset_tag,
-    "pixel_capture_w320h240.yuv", 320, 240, 3, 35 },
+    "pixel_capture_w320h240.yuv", 320, 240, 3, 35, 16 },
   { subgop_config_str_preset_map[TEMPORAL_SCALABLE].preset_tag,
-    "paris_352_288_30.y4m", 352, 288, 3, 35 },
+    "paris_352_288_30.y4m", 352, 288, 3, 35, 16 },
   { subgop_config_str_preset_map[LOW_DELAY].preset_tag, "screendata.y4m", 640,
-    480, 5, 0 },
+    480, 5, 0, 16 },
+  { subgop_config_str_preset_map[LOW_DELAY].preset_tag, "screendata.y4m", 640,
+    480, 5, 0, 32 },
 };
 
 using libaom_test::ACMRandom;
-class SubGopSwitchingTest
+class SubGopSwitchingTestLarge
     : public ::libaom_test::CodecTestWith2Params<SubGopSwitchTestParams,
                                                  aom_rc_mode>,
       public ::libaom_test::EncoderTest {
  protected:
-  SubGopSwitchingTest()
+  SubGopSwitchingTestLarge()
       : EncoderTest(GET_PARAM(0)), test_params_(GET_PARAM(1)),
         rc_end_usage_(GET_PARAM(2)) {
     last_subgop_str_ = NULL;
@@ -811,7 +846,7 @@ class SubGopSwitchingTest
     rnd_.Reset(ACMRandom::DeterministicSeed());
     ResetSubgop();
   }
-  virtual ~SubGopSwitchingTest() {}
+  virtual ~SubGopSwitchingTestLarge() {}
 
   virtual void SetUp() {
     InitializeConfig();
@@ -844,7 +879,7 @@ class SubGopSwitchingTest
     // Switch between input sub-gop and no sub-gop config and configure the
     // encoder
     const char *subgop_str = last_subgop_str_ ? NULL : test_params_.subgop_str;
-    int max_gf_interval = 16;
+    int max_gf_interval = test_params_.max_gf_interval;
     // Get max gf interval for enh config
     if (subgop_str && !strcmp(subgop_str, "enh"))
       max_gf_interval = GetRandGFIntervalEnh();
@@ -919,9 +954,9 @@ class SubGopSwitchingTest
   const char *last_subgop_str_;
 };
 
-TEST_P(SubGopSwitchingTest, SubGopSwitching) {
+TEST_P(SubGopSwitchingTestLarge, SubGopSwitching) {
   std::unique_ptr<libaom_test::VideoSource> video;
-  const unsigned int kFrames = 200;
+  const unsigned int kFrames = 175;
 
   if (is_extension_y4m(test_params_.input_file)) {
     video.reset(
@@ -938,7 +973,7 @@ TEST_P(SubGopSwitchingTest, SubGopSwitching) {
   EXPECT_TRUE(num_subgop_cfg_used_);
 }
 
-AV1_INSTANTIATE_TEST_SUITE(SubGopSwitchingTest,
+AV1_INSTANTIATE_TEST_SUITE(SubGopSwitchingTestLarge,
                            ::testing::ValuesIn(SubgopSwitchTestVectors),
                            ::testing::Values(AOM_Q, AOM_VBR, AOM_CQ, AOM_CBR));
 }  // namespace

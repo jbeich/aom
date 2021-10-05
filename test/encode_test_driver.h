@@ -28,16 +28,14 @@ namespace libaom_test {
 class CodecFactory;
 class VideoSource;
 
-enum TestMode { kRealTime, kOnePassGood };
-#define ALL_TEST_MODES \
-  ::testing::Values(::libaom_test::kRealTime, ::libaom_test::kOnePassGood)
+enum TestMode { kOnePassGood };
+#define ALL_TEST_MODES ::testing::Values(::libaom_test::kOnePassGood)
 
-#define ONE_PASS_TEST_MODES \
-  ::testing::Values(::libaom_test::kRealTime, ::libaom_test::kOnePassGood)
+#define ONE_PASS_TEST_MODES ::testing::Values(::libaom_test::kOnePassGood)
 
 #define TWO_PASS_TEST_MODES ::testing::Values()
 
-#define NONREALTIME_TEST_MODES ::testing::Values(::libaom_test::kOnePassGood)
+#define GOODQUALITY_TEST_MODES ::testing::Values(::libaom_test::kOnePassGood)
 
 // Provides an object to handle the libaom get_cx_data() iteration pattern
 class CxDataIterator {
@@ -185,7 +183,7 @@ class EncoderTest {
  protected:
   explicit EncoderTest(const CodecFactory *codec)
       : codec_(codec), abort_(false), init_flags_(0), frame_flags_(0),
-        last_pts_(0), mode_(kRealTime), number_spatial_layers_(1) {
+        last_pts_(0), mode_(kOnePassGood), number_spatial_layers_(1) {
     // Default to 1 thread.
     cfg_.g_threads = 1;
   }

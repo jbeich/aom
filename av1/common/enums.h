@@ -28,6 +28,12 @@ extern "C" {
 
 #undef MAX_SB_SIZE
 
+// Cross-Component Sample Offset (CCSO)
+#if CONFIG_CCSO
+#define CCSO_BLK_SIZE 7
+#define CCSO_PADDING_SIZE 5
+#endif
+
 // Max superblock size
 #define MAX_SB_SIZE_LOG2 7
 #define MAX_SB_SIZE (1 << MAX_SB_SIZE_LOG2)
@@ -81,6 +87,21 @@ extern "C" {
 #define SHARED_PART_SIZE 128
 #define PARTITION_STRUCTURE_NUM 2
 #endif
+
+// Multiple reference line selection for intra prediction
+#if CONFIG_MRLS
+#define MRL_LINE_NUMBER 4
+#endif
+
+// Intra Secondary Transform
+#if CONFIG_IST
+#define IST_SET_SIZE 14  // IST kernel set size
+#define STX_TYPES 4      // 4 sec_tx_types including no IST
+#define IST_4x4_WIDTH 16
+#define IST_4x4_HEIGHT 8
+#define IST_8x8_WIDTH 64
+#define IST_8x8_HEIGHT 32
+#endif  // CONFIG_IST
 
 #define DIST_PRECISION_BITS 4
 #define DIST_PRECISION (1 << DIST_PRECISION_BITS)  // 16
@@ -258,6 +279,60 @@ enum {
   TX_SIZES_LARGEST = TX_64X64,
   TX_INVALID = 255  // Invalid transform size
 } UENUM1BYTE(TX_SIZE);
+
+#if CONFIG_NEW_TX_PARTITION
+//  Baseline transform partition types
+//
+//  Square:
+//  NONE           SPLIT
+//  +-------+      +---+---+
+//  |       |      |   |   |
+//  |       |      +---+---+
+//  |       |      |   |   |
+//  +-------+      +---+---+
+//
+//
+//  Rectangular:
+//  NONE                  SPLIT
+//  +--------------+      +-------+-------+
+//  |              |      |       |       |
+//  |              |      +       +       +
+//  |              |      |       |       |
+//  +--------------+      +-------+-------+
+//
+//  Extended transform partition types (square and rect are the same)
+//
+//  NONE           SPLIT
+//  +-------+      +---+---+
+//  |       |      |   |   |
+//  |       |      +---+---+
+//  |       |      |   |   |
+//  +-------+      +---+---+
+//
+//  HORZ                 VERT
+//  +-------+      +---+---+
+//  |       |      |   |   |
+//  +-------+      |   |   |
+//  |       |      |   |   |
+//  +-------+      +---+---+
+//
+//  HORZ4              VERT4
+//  +-------+      +-+-+-+-+
+//  +-------+      | | | | |
+//  +-------+      | | | | |
+//  +-------+      | | | | |
+//  +-------+      +-+-+-+-+
+enum {
+  TX_PARTITION_NONE,
+  TX_PARTITION_SPLIT,
+  TX_PARTITION_HORZ,
+  TX_PARTITION_VERT,
+  TX_PARTITION_HORZ4,
+  TX_PARTITION_VERT4,
+  TX_PARTITION_TYPES,
+  TX_PARTITION_TYPES_INTRA = TX_PARTITION_VERT4 + 1,
+} UENUM1BYTE(TX_PARTITION_TYPE);
+#endif  // CONFIG_NEW_TX_PARTITION
 
 #define TX_SIZE_LUMA_MIN (TX_4X4)
 /* We don't need to code a transform size unless the allowed size is at least
@@ -459,32 +534,55 @@ enum {
   SMOOTH_V_PRED,  // Vertical interpolation
   SMOOTH_H_PRED,  // Horizontal interpolation
   PAETH_PRED,     // Predict from the direction of smallest gradient
+#if !CONFIG_NEW_INTER_MODES
   NEARESTMV,
+#endif  // !CONFIG_NEW_INTER_MODES
   NEARMV,
   GLOBALMV,
   NEWMV,
-  // Compound ref compound modes
+// Compound ref compound modes
+#if !CONFIG_NEW_INTER_MODES
   NEAREST_NEARESTMV,
+#endif  // !CONFIG_NEW_INTER_MODES
   NEAR_NEARMV,
+#if !CONFIG_NEW_INTER_MODES
   NEAREST_NEWMV,
   NEW_NEARESTMV,
+#endif  // !CONFIG_NEW_INTER_MODES
   NEAR_NEWMV,
   NEW_NEARMV,
   GLOBAL_GLOBALMV,
   NEW_NEWMV,
   MB_MODE_COUNT,
   INTRA_MODE_START = DC_PRED,
+#if CONFIG_NEW_INTER_MODES
+  INTRA_MODE_END = NEARMV,
+#else
   INTRA_MODE_END = NEARESTMV,
+#endif  // CONFIG_NEW_INTER_MODES
   DIR_MODE_START = V_PRED,
   DIR_MODE_END = D67_PRED + 1,
   INTRA_MODE_NUM = INTRA_MODE_END - INTRA_MODE_START,
+#if CONFIG_NEW_INTER_MODES
+  SINGLE_INTER_MODE_START = NEARMV,
+  SINGLE_INTER_MODE_END = NEAR_NEARMV,
+#else
   SINGLE_INTER_MODE_START = NEARESTMV,
   SINGLE_INTER_MODE_END = NEAREST_NEARESTMV,
+#endif  // CONFIG_NEW_INTER_MODES
   SINGLE_INTER_MODE_NUM = SINGLE_INTER_MODE_END - SINGLE_INTER_MODE_START,
+#if CONFIG_NEW_INTER_MODES
+  COMP_INTER_MODE_START = NEAR_NEARMV,
+#else
   COMP_INTER_MODE_START = NEAREST_NEARESTMV,
+#endif  // CONFIG_NEW_INTER_MODES
   COMP_INTER_MODE_END = MB_MODE_COUNT,
   COMP_INTER_MODE_NUM = COMP_INTER_MODE_END - COMP_INTER_MODE_START,
+#if CONFIG_NEW_INTER_MODES
+  INTER_MODE_START = NEARMV,
+#else
   INTER_MODE_START = NEARESTMV,
+#endif  // CONFIG_NEW_INTER_MODES
   INTER_MODE_END = MB_MODE_COUNT,
   INTRA_MODES = PAETH_PRED + 1,  // PAETH_PRED has to be the last intra mode.
   INTRA_INVALID = MB_MODE_COUNT  // For uv_mode in inter blocks
@@ -510,6 +608,12 @@ enum {
   UV_INTRA_MODES,
   UV_MODE_INVALID,  // For uv_mode in inter blocks
 } UENUM1BYTE(UV_PREDICTION_MODE);
+
+// Number of top model rd to store for pruning y modes in intra mode decision
+#define TOP_INTRA_MODEL_COUNT 4
+// Total number of luma intra prediction modes (include both directional and
+// non-directional modes)
+#define LUMA_MODE_COUNT 61
 
 enum {
   SIMPLE_TRANSLATION,
@@ -581,8 +685,19 @@ enum {
 #define MAX_ANGLE_DELTA 3
 #define ANGLE_STEP 3
 
+#if CONFIG_ORIP
+#define ADDITIONAL_ANGLE_DELTA 1
+#define TOTAL_NUM_ORIP_ANGLE_DELTA 2
+#define ANGLE_DELTA_VALUE_ORIP (MAX_ANGLE_DELTA + 1)
+#endif
+
+#if CONFIG_NEW_INTER_MODES
+#define INTER_SINGLE_MODES (1 + NEWMV - NEARMV)
+#define INTER_COMPOUND_MODES (1 + NEW_NEWMV - NEAR_NEARMV)
+#else
 #define INTER_SINGLE_MODES (1 + NEWMV - NEARESTMV)
 #define INTER_COMPOUND_MODES (1 + NEW_NEWMV - NEAREST_NEARESTMV)
+#endif  // CONFIG_NEW_INTER_MODES
 
 #define SKIP_CONTEXTS 3
 #define SKIP_MODE_CONTEXTS 3
@@ -591,11 +706,21 @@ enum {
 #define COMP_GROUP_IDX_CONTEXTS (6 * (1 + CONFIG_REMOVE_DIST_WTD_COMP))
 
 #define NMV_CONTEXTS 3
-
 #define NEWMV_MODE_CONTEXTS 6
 #define GLOBALMV_MODE_CONTEXTS 2
 #define REFMV_MODE_CONTEXTS 6
+
+#if CONFIG_NEW_INTER_MODES
+#define ISREFMV_MODE_CONTEXTS 2
+#define MIN_MAX_DRL_BITS 1
+#define MAX_MAX_DRL_BITS 7
+#define INTER_SINGLE_MODE_CONTEXTS \
+  (NEWMV_MODE_CONTEXTS * GLOBALMV_MODE_CONTEXTS * ISREFMV_MODE_CONTEXTS)
+#define DRL_MODE_CONTEXTS (NEWMV_MODE_CONTEXTS * GLOBALMV_MODE_CONTEXTS)
+#else
+#define MAX_DRL_BITS 2
 #define DRL_MODE_CONTEXTS 3
+#endif  // CONFIG_NEW_INTER_MODES
 
 #define GLOBALMV_OFFSET 3
 #define REFMV_OFFSET 4
@@ -620,7 +745,13 @@ enum {
 #define MAX_MV_REF_CANDIDATES 2
 
 #define MAX_REF_MV_STACK_SIZE 8
+
+#if CONFIG_NEW_INTER_MODES
+#define USABLE_REF_MV_STACK_SIZE (MAX_REF_MV_STACK_SIZE)
+#else
 #define USABLE_REF_MV_STACK_SIZE 4
+#endif  // CONFIG_NEW_INTER_MODES
+
 #define REF_CAT_LEVEL 640
 
 #define INTRA_INTER_CONTEXTS 4
@@ -630,7 +761,11 @@ enum {
 #define COMP_REF_TYPE_CONTEXTS 5
 #define UNI_COMP_REF_CONTEXTS 3
 
+#if CONFIG_NEW_TX_PARTITION
+#define TXFM_PARTITION_INTER_CONTEXTS ((TX_SIZES - TX_8X8) * 6 - 3)
+#else
 #define TXFM_PARTITION_CONTEXTS ((TX_SIZES - TX_8X8) * 6 - 3)
+#endif  // CONFIG_NEW_TX_PARTITION
 typedef uint8_t TXFM_CONTEXT;
 
 // An enum for single reference types (and some derived values).

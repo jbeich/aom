@@ -98,12 +98,6 @@ if(CONFIG_AV1_ENCODER)
   set(AOM_DOXYGEN_EXAMPLE_DESCRIPTIONS ${AOM_DOXYGEN_EXAMPLE_DESCRIPTIONS}
                                        "Scalable encoder loop.")
 
-  set(AOM_DOXYGEN_EXAMPLE_SOURCES ${AOM_DOXYGEN_EXAMPLE_SOURCES}
-                                  "${AOM_ROOT}/examples/svc_encoder_rtc.c")
-
-  set(AOM_DOXYGEN_EXAMPLE_DESCRIPTIONS ${AOM_DOXYGEN_EXAMPLE_DESCRIPTIONS}
-                                       "Layered encoder for RTC.")
-
   set(AOM_DOXYGEN_SECTIONS ${AOM_DOXYGEN_SECTIONS} "av1_encoder encoder")
 
   set(AOM_DOXYGEN_SOURCES ${AOM_DOXYGEN_SOURCES} "${AOM_ROOT}/aom/aomcx.h"
@@ -149,9 +143,7 @@ if(CONFIG_AV1_ENCODER)
       "${AOM_ROOT}/av1/encoder/temporal_filter.h"
       "${AOM_ROOT}/av1/encoder/temporal_filter.c"
       "${AOM_ROOT}/av1/encoder/tpl_model.h"
-      "${AOM_ROOT}/av1/encoder/tx_search.h"
-      "${AOM_ROOT}/av1/encoder/var_based_part.h"
-      "${AOM_ROOT}/av1/encoder/nonrd_pickmode.c")
+      "${AOM_ROOT}/av1/encoder/tx_search.h")
 endif()
 
 if(CONFIG_AV1_DECODER AND CONFIG_AV1_ENCODER)
