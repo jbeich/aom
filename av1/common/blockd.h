@@ -2347,6 +2347,18 @@ static INLINE int av1_get_max_eob(TX_SIZE tx_size) {
   }
   return tx_size_2d[tx_size];
 }
+
+#if CONFIG_EXT_RECUR_PARTITIONS
+static AOM_INLINE const PARTITION_TREE *get_partition_subtree_const(
+    const PARTITION_TREE *partition_tree, int idx) {
+  if (!partition_tree) {
+    return NULL;
+  }
+  return partition_tree->sub_tree[idx];
+}
+
+#endif  // CONFIG_EXT_RECUR_PARTITIONS
+
 /*!\endcond */
 
 #ifdef __cplusplus

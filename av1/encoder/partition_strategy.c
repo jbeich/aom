@@ -1906,11 +1906,8 @@ SimpleMotionData *av1_get_sms_data(AV1_COMP *const cpi,
   return cur_block;
 }
 
-PARTITION_TYPE av1_get_prev_partition(AV1_COMP *const cpi, MACROBLOCK *x,
-                                      int mi_row, int mi_col,
-                                      BLOCK_SIZE bsize) {
-  const AV1_COMMON *const cm = &cpi->common;
-  const BLOCK_SIZE sb_size = cm->seq_params.sb_size;
+PARTITION_TYPE av1_get_prev_partition(MACROBLOCK *x, int mi_row, int mi_col,
+                                      BLOCK_SIZE bsize, BLOCK_SIZE sb_size) {
   SimpleMotionDataBufs *sms_bufs = x->sms_bufs;
   const SimpleMotionData *cur_block =
       av1_get_sms_data_entry(sms_bufs, mi_row, mi_col, bsize, sb_size);

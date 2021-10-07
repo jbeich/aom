@@ -312,8 +312,8 @@ static INLINE void init_simple_motion_search_mvs(
   }
 }
 
-PARTITION_TYPE av1_get_prev_partition(AV1_COMP *const cpi, MACROBLOCK *x,
-                                      int mi_row, int mi_col, BLOCK_SIZE bsize);
+PARTITION_TYPE av1_get_prev_partition(MACROBLOCK *x, int mi_row, int mi_col,
+                                      BLOCK_SIZE bsize, BLOCK_SIZE sb_size);
 
 #if CONFIG_EXT_RECUR_PARTITIONS
 static INLINE void av1_init_sms_data_bufs(SimpleMotionDataBufs *data_bufs) {

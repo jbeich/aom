@@ -36,7 +36,8 @@ bool av1_rd_pick_partition(AV1_COMP *const cpi, ThreadData *td,
                            int mi_col, BLOCK_SIZE bsize, RD_STATS *rd_cost,
                            RD_STATS best_rdc, PC_TREE *pc_tree,
 #if CONFIG_SDP && CONFIG_EXT_RECUR_PARTITIONS
-                           PARTITION_TREE *ptree_luma,
+                           const PARTITION_TREE *ptree_luma,
+                           const PARTITION_TREE *template_tree,
 #endif  // CONFIG_SDP && CONFIG_EXT_RECUR_PARTITIONS
                            SIMPLE_MOTION_DATA_TREE *sms_tree, int64_t *none_rd,
                            SB_MULTI_PASS_MODE multi_pass_mode,
