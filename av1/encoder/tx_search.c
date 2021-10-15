@@ -2432,6 +2432,11 @@ static void search_tx_type(const AV1_COMP *cpi, MACROBLOCK *x, int plane,
       // Therefore transform domain distortion is not valid for these
       // transform sizes.
       (txsize_sqr_up_map[tx_size] != TX_64X64) &&
+#if CONFIG_IST
+      // Use pixel domain distortion for IST
+      // TODO(any): Make IST compatible with tx domain distortion
+      !cm->seq_params.enable_ist &&
+#endif
       // Use pixel domain distortion for DC only blocks
       !dc_only_blk;
   // Flag to indicate if an extra calculation of distortion in the pixel domain
