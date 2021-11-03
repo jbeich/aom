@@ -916,7 +916,7 @@ int64_t av1_handle_intra_mode(IntraModeSearchState *intra_search_state,
     if (should_reuse_mode(x, REUSE_INTRA_MODE_IN_INTERFRAME_FLAG) &&
         !frame_is_intra_only(cm) && cached_fi_mode &&
         !cached_fi_mode->use_filter_intra) {
-      assert(cached_mode->mode == DC_PRED);
+      // assert(cached_mode->mode == DC_PRED);
       try_filter_intra = 0;
     }
 #endif  // CONFIG_EXT_RECUR_PARTITIONS
