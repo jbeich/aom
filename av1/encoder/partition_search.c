@@ -789,6 +789,7 @@ static void pick_sb_modes(AV1_COMP *const cpi, TileDataEnc *tile_data,
   const int num_planes = av1_num_planes(cm);
   MACROBLOCKD *const xd = &x->e_mbd;
   int plane_type = (xd->tree_type == CHROMA_PART);
+  assert(bsize < BLOCK_SIZES_ALL);
   assert(IMPLIES(xd->tree_type == CHROMA_PART,
                  AOMMIN(block_size_wide[bsize], block_size_high[bsize]) > 4));
 #endif
